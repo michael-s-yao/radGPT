@@ -13,14 +13,16 @@ from .anthropic import ClaudeSonnet
 from .base import LLM, get_top_k_panels
 from .dbrx import DBRXInstruct
 from .mistral import Mistral8x7BInstruct
+from .meta import Llama3Instruct
 from .openai import GPT4Turbo
 
 
 __all__ = [
-    "DBRXInstruct",
-    "Mistral8x7BInstruct",
-    "GPT4Turbo",
     "ClaudeSonnet",
+    "DBRXInstruct",
+    "GPT4Turbo",
+    "Llama3Instruct",
+    "Mistral8x7BInstruct",
     "LLM",
     "get_llm_options",
     "get_top_k_panels"

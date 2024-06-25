@@ -25,6 +25,4 @@ dependencies:
   - zlib=1.2.13
   - pip:
     - -r requirements.txt
-variables:
-  MISTRAL_MODEL: /home/usr/mistral_models
 prefix: /home/usr/miniconda3/envs/radgpt

@@ -128,16 +128,9 @@ def main(
                 exit()
 
     # Evaluate the LLM according to the ACR Appropriateness Criteria.
-    count, start_idx = 0, -1
+    count = 0
     all_results = {}
-    if savepath is not None and os.path.isfile(savepath):
-        with open(savepath, "r") as f:
-            all_results = json.load(f)
-    if len(all_results.keys()):
-        start_idx = max([int(k) for k in all_results.keys()])
     for idx, case in enumerate(patient_cases):
-        if idx <= start_idx:
-            continue
         gt = y_gt[y_gt["case"] == radgpt.data.hashme(str(case))][
             "panel" if by_panel else "topic"
         ]
@@ -174,7 +167,7 @@ def main(
             json.dump(submitted_jobs, f, indent=2)
         click.echo(submission)
     else:
-        acc = count / (total_case_count - start_idx - 1)
+        acc = count / total_case_count
         click.echo(f"Accuracy: {acc:.6f}")
 
 

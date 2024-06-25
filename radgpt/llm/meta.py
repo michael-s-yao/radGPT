@@ -1,5 +1,5 @@
 """
-Mistral AI 8x7B Instruct LLM model.
+Meta Llama-3 70B Instruct LLM model.
 
 Author(s):
     Michael Yao @michael-s-yao
@@ -9,20 +9,15 @@ Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import json
 import torch
-from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-from mistral_common.protocol.instruct.messages import (
-    UserMessage, SystemMessage
-)
-from mistral_common.protocol.instruct.request import ChatCompletionRequest
-from transformers import AutoModelForCausalLM
+from transformers import pipeline
 from typing import Sequence
 
 from ..utils import import_flash_attn
 from .base import LLM
 
 
-class Mistral8x7BInstruct(LLM):
-    hf_repo_name: str = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+class Llama3Instruct(LLM):
+    hf_repo_name: str = "meta-llama/Meta-Llama-3-70B-Instruct"
 
     token: bool = True
 
@@ -41,26 +36,27 @@ class Mistral8x7BInstruct(LLM):
         Args:
             seed: random seed. Default 42.
         """
-        super(Mistral8x7BInstruct, self).__init__(seed=seed, **kwargs)
+        super(Llama3Instruct, self).__init__(seed=seed, **kwargs)
 
         self.dtype = torch.float16
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
             self.dtype = torch.bfloat16
 
         attn_and_autocast = import_flash_attn()
-        self.attn_implementation = attn_and_autocast["attn_implementation"]
         self.autocast_context = attn_and_autocast["autocast_context"]
 
-        self.tokenizer = MistralTokenizer.v1()
-
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.hf_repo_name,
-            trust_remote_code=self.trust_remote_code,
-            token=self.token,
-            attn_implementation=self.attn_implementation,
-            torch_dtype=self.dtype,
+        self.pipeline = pipeline(
+            "text-generation",
+            model=self.hf_repo_name,
+            model_kwargs={"torch_dtype": self.dtype},
             device_map="auto",
+            trust_remote_code=self.trust_remote_code,
+            token=self.token
         )
+        self.terminators = [
+            self.pipeline.tokenizer.eos_token_id,
+            self.pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        ]
 
     def query(self, prompt: str) -> Sequence[str]:
         """
@@ -71,26 +67,22 @@ class Mistral8x7BInstruct(LLM):
         """
         messages = []
         if hasattr(self, "system_prompt") and self.system_prompt:
-            messages.append(SystemMessage(content=self.system_prompt))
-        messages.append(UserMessage(content=prompt))
-        request = ChatCompletionRequest(messages=messages)
-        tokens = self.tokenizer.encode_chat_completion(request).tokens
-        eos_token_id = self.tokenizer.instruct_tokenizer.tokenizer.eos_id
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": prompt})
         with torch.inference_mode():
             with self.autocast_context:
-                enc = self.model.generate(
-                    torch.tensor([tokens]).to(self.model.device),
+                output = self.pipeline(
+                    messages,
                     max_new_tokens=self.max_new_tokens,
                     top_p=self.top_p,
                     top_k=self.top_k,
                     repetition_penalty=self.repetition_penalty,
                     use_cache=True,
                     do_sample=True,
-                    eos_token_id=eos_token_id,
-                    pad_token_id=eos_token_id
+                    eos_token_id=self.terminators,
+                    pad_token_id=self.pipeline.tokenizer.eos_token_id,
                 )
-        output = self.tokenizer.decode(enc[0].tolist())
-        output = output.split(" [/INST] ", 1)[-1].split("}", 1)[0] + "}"
+        output = output[0]["generated_text"][-1]["content"]
         try:
             output = json.loads(output)["answer"]
             if isinstance(output, list):
