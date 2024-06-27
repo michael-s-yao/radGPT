@@ -21,12 +21,6 @@ from .base import LLM
 class GPT4Turbo(LLM):
     model_name: str = "gpt-4-turbo"
 
-    top_p: float = 0.95
-
-    repetition_penalty: float = 1.01
-
-    max_new_tokens: int = 128
-
     def __init__(self, seed: int = 42, **kwargs):
         """
         Args:

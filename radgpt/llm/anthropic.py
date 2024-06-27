@@ -8,9 +8,7 @@ Author(s):
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import json
-import os
-from configparser import RawConfigParser
-from anthropic import AnthropicBedrock
+from anthropic import AnthropicBedrock, NotGiven
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
@@ -18,13 +16,7 @@ from .base import LLM
 
 
 class ClaudeSonnet(LLM):
-    model_name: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-
-    top_p: float = 0.95
-
-    repetition_penalty: float = 1.01
-
-    max_new_tokens: int = 128
+    model_name: str = "anthropic.claude-3-sonnet-20240229-v1:0"
 
     def __init__(
         self,
@@ -41,24 +33,7 @@ class ClaudeSonnet(LLM):
             profile: the AWS profile to use.
         """
         super(ClaudeSonnet, self).__init__(seed=seed, **kwargs)
-
-        credentials = RawConfigParser()
-        credentials.read(
-            os.path.expanduser(os.path.join(aws_config_dir, "credentials"))
-        )
-        config = RawConfigParser()
-        config.read(
-            os.path.expanduser(os.path.join(aws_config_dir, "config"))
-        )
-
-        self.client = AnthropicBedrock(
-            aws_access_key=credentials.get(profile, "aws_access_key_id"),
-            aws_secret_key=credentials.get(profile, "aws_secret_access_key"),
-            aws_session_token=os.environ["AWS_SESSION_TOKEN"],
-            aws_region=config.get(
-                "profile " * int(profile != "default") + profile, "region"
-            )
-        )
+        self.client = AnthropicBedrock(aws_region="us-west-2")
 
     def query(self, prompt: str) -> Sequence[str]:
         """
@@ -67,21 +42,24 @@ class ClaudeSonnet(LLM):
         Returns:
             The model response.
         """
-        messages = []
+        messages, system = [], NotGiven()
         if hasattr(self, "system_prompt") and self.system_prompt:
-            messages.append({"role": "system", "content": self.system_prompt})
+            system = self.system_prompt
         messages.append({"role": "user", "content": prompt})
         chat_completion = self.client.messages.create(
+            system=system,
             messages=messages,
             model=self.model_name,
             top_p=self.top_p,
-            max_tokens=self.max_new_tokens,
-            frequency_penalty=self.repetition_penalty,
-            response_format={"type": "json_object"},
-            seed=self.seed
+            top_k=self.top_k,
+            max_tokens=self.max_new_tokens
         )
-        answer = json.loads(chat_completion.choices[0].message.content)
-        answer = answer["answer"]
-        if isinstance(answer, str):
-            return [answer]
-        return answer
+
+        output = chat_completion.content[0].text
+        try:
+            output = json.loads(output)["answer"]
+            if isinstance(output, list):
+                return output
+            return [output]
+        except json.JSONDecodeError:
+            return [output]

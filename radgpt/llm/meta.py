@@ -23,14 +23,6 @@ class Llama3Instruct(LLM):
 
     trust_remote_code: bool = True
 
-    top_p: float = 0.95
-
-    top_k: int = 50
-
-    repetition_penalty: float = 1.01
-
-    max_new_tokens: int = 128
-
     def __init__(self, seed: int = 42, **kwargs):
         """
         Args:

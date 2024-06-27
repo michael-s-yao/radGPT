@@ -63,6 +63,13 @@ import radgpt
     show_default=True,
     help="Optional path to save the inference results to."
 )
+@click.option(
+    "--fast-dev-run",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Fast development run to test the implementation."
+)
 def main(
     dataset: str,
     llm: str,
@@ -70,6 +77,7 @@ def main(
     seed: int = 42,
     by_panel: bool = True,
     savedir: Optional[Union[Path, str]] = None,
+    fast_dev_run: bool = False,
     **kwargs
 ):
     """Aligning LLMs with ACR Appropriateness Criteria."""
@@ -159,6 +167,8 @@ def main(
             if savepath is not None:
                 with open(savepath, "w") as f:
                     json.dump(all_results, f, indent=2)
+        if fast_dev_run:
+            exit()
 
     if isinstance(all_results, list):
         submission = llm.submit_batch_query(all_results)
