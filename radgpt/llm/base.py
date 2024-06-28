@@ -15,6 +15,20 @@ from typing import Any, Dict, Optional, Sequence, Union
 from ..acr import AppropriatenessCriteria
 
 
+# Baseline user prompt without any engineering.
+USER_PROMPT_BASE: str = (
+    "Patient Case: {case}\n\n"
+    "Which category best describes the patient's chief complaint?"
+)
+
+
+# User prompt for retrieval-augmented generation (RAG).
+USER_PROMPT_RAG: str = (
+    "Here is some context for you to consider:\n{context}\n\n"
+    f"### User:\n{USER_PROMPT_BASE}\n\n### Assistant:\n"
+)
+
+
 class LLM(abc.ABC):
     top_p: float = 0.95
 
@@ -57,6 +71,7 @@ def get_top_k_panels(
     method: str,
     uid: Optional[str] = None,
     batch_if_available: bool = True,
+    rag_context: Optional[Sequence[str]] = None
 ) -> Union[Sequence[str], Dict[str, Any]]:
     """
     Returns the top k predictions for an input patient case.
@@ -68,15 +83,19 @@ def get_top_k_panels(
         method: the method to use to generate the predictions.
         uid: an optional unique ID for the query.
         batch_if_available: generate a batch API request if available.
+        rag_context: an optional list of contexts to use for RAG.
     Returns:
         The top k predictions from the LLM, or a batch request if applicable.
     """
-    if method == "prompting":
-        prompt = (
-            f"Patient Case: {case}\n\n"
-            "Which category best describes the patient's chief complaint?"
+    if method.lower() in ["prompting", "rag"]:
+        prompt = USER_PROMPT_BASE.format(case=case)
+    elif method.lower() == "rag":
+        prompt = USER_PROMPT_RAG.format(
+            case=case, context=("\n".join([doc.text for doc in rag_context]))
         )
-        if batch_if_available and hasattr(llm, "generate_batch_query"):
-            return llm.generate_batch_query(prompt, uid)
-        return llm.query(prompt)
-    raise NotImplementedError
+    else:
+        raise NotImplementedError
+
+    if batch_if_available and hasattr(llm, "generate_batch_query"):
+        return llm.generate_batch_query(prompt, uid)
+    return llm.query(prompt)

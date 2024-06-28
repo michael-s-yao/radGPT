@@ -143,7 +143,7 @@ def read_mimic_iv_dataset(
     random.seed(seed)
 
     one_liners = []
-    for i, note in notes.iterrows():
+    for _, note in notes.iterrows():
         txt = note["text"]
         txt = txt[txt.find(hpi_title):].replace(hpi_title, "", 1)
 

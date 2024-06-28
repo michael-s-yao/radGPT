@@ -16,7 +16,7 @@ from .base import LLM
 
 
 class ClaudeSonnet(LLM):
-    model_name: str = "anthropic.claude-3-sonnet-20240229-v1:0"
+    model_name: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 
     def __init__(
         self,
@@ -33,7 +33,7 @@ class ClaudeSonnet(LLM):
             profile: the AWS profile to use.
         """
         super(ClaudeSonnet, self).__init__(seed=seed, **kwargs)
-        self.client = AnthropicBedrock(aws_region="us-west-2")
+        self.client = AnthropicBedrock(aws_region="us-east-1")
 
     def query(self, prompt: str) -> Sequence[str]:
         """

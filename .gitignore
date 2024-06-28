@@ -119,3 +119,5 @@ batch_queries.json
 *.csv
 *.csv.gz
 *.tar
+*.index
+evidence/

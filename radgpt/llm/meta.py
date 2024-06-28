@@ -80,5 +80,5 @@ class Llama3Instruct(LLM):
             if isinstance(output, list):
                 return output
             return [output]
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, KeyError):
             return [output]

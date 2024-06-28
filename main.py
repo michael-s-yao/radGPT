@@ -39,9 +39,33 @@ import radgpt
 @click.option(
     "-m",
     "--method",
-    type=str,
+    type=click.Choice(radgpt.llm.get_method_options(), case_sensitive=False),
     required=True,
     help="The LLM query method to use."
+)
+@click.option(
+    "--rag.retriever",
+    "rag_retriever",
+    type=click.Choice(
+        radgpt.retrieval.list_retrievers(), case_sensitive=False
+    ),
+    default=None,
+    help="The retriever to use if the query method is set to RAG."
+)
+@click.option(
+    "--rag.corpus",
+    "rag_corpus",
+    type=click.Choice(radgpt.retrieval.list_corpuses(), case_sensitive=False),
+    default=None,
+    help="The corpus to use for the retriever if the query method is RAG."
+)
+@click.option(
+    "--rag.top_k",
+    "rag_top_k",
+    type=int,
+    default=16,
+    show_default=True,
+    help="Number of documents to retrieve for RAG."
 )
 @click.option(
     "--seed",
@@ -74,6 +98,9 @@ def main(
     dataset: str,
     llm: str,
     method: str,
+    rag_retriever: Optional[str] = None,
+    rag_corpus: Optional[str] = None,
+    rag_top_k: Optional[int] = 32,
     seed: int = 42,
     by_panel: bool = True,
     savedir: Optional[Union[Path, str]] = None,
@@ -85,6 +112,8 @@ def main(
     savepath = None
     _key = "panel" if by_panel else "topic"
     run_id = f"{dataset}_{llm}_{method}_{_key}_{seed}"
+    if method.lower == "rag":
+        run_id += f"_{rag_retriever}_{rag_corpus}_{rag_top_k}"
     if savedir is not None:
         os.makedirs(savedir, exist_ok=True)
         savepath = os.path.join(
@@ -101,13 +130,20 @@ def main(
     total_case_count = len(patient_cases)
 
     # Instantiate the LLM client.
-    llm = getattr(radgpt.llm, llm)(seed=seed)
+    llm_init_kwargs = {"seed": seed}
+    if method.lower() == "rag":
+        llm_init_kwargs["repetition_penalty"] = 1.5
+    llm = getattr(radgpt.llm, llm)(**llm_init_kwargs)
     llm.set_system_prompt(
         radgpt.llm.DEFAULT_SYSTEM_PROMPT.format(
             ac.panels if by_panel else ac.topics,
             "Thoracic" if by_panel else "Lung Cancer Screening"
         )
     )
+
+    # Load the retriever.
+    if method.lower() == "rag":
+        retriever = radgpt.retrieval.get_retriever(rag_retriever, rag_corpus)
 
     batch_fn = os.environ.get("BATCH_QUERY_PATH", "batch_queries.json")
     submitted_jobs = {}
@@ -146,13 +182,17 @@ def main(
         if downloaded_results is not None:
             ypreds = downloaded_results[idx]
         else:
+            rag_context = None
+            if method.lower() == "rag":
+                rag_context = retriever.retrieve(str(case), k=rag_top_k)
             ypreds = radgpt.llm.get_top_k_panels(
                 case=str(case),
                 criteria=ac,
                 llm=llm,
                 top_k=1,
                 method=method,
-                uid=f"{run_id}_{idx}"
+                uid=f"{run_id}_{idx}",
+                rag_context=rag_context
             )
         if isinstance(ypreds, dict):
             if isinstance(all_results, dict):
@@ -167,6 +207,7 @@ def main(
             if savepath is not None:
                 with open(savepath, "w") as f:
                     json.dump(all_results, f, indent=2)
+
         if fast_dev_run:
             exit()
 

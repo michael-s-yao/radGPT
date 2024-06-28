@@ -7,7 +7,9 @@ Author(s):
 
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
+import sys
 from typing import Sequence
+from inspect import isclass
 
 from .anthropic import ClaudeSonnet
 from .base import LLM, get_top_k_panels
@@ -37,12 +39,23 @@ def get_llm_options() -> Sequence[str]:
     Returns:
         A list of all of the available LLMs.
     """
-    import sys
-    from inspect import isclass
     module = sys.modules[__name__]
     opts = filter(lambda attr: isclass(getattr(module, attr)), dir(module))
     opts = filter(lambda attr: issubclass(getattr(module, attr), LLM), opts)
     return list(filter(lambda attr: getattr(module, attr) != LLM, opts))
+
+
+def get_method_options() -> Sequence[str]:
+    """
+    Returns the implemented LLM prompting options. `prompting` is just
+    standard prompting, `rag` is retrieval-augmented generation, `icl` is
+    in-context learning, and `cot` is chain-of-thought prompting.
+    Input:
+        None.
+    Returns:
+        A list of the implemented LLM prompting options.
+    """
+    return ["prompting", "rag", "icl", "cot"]
 
 
 DEFAULT_SYSTEM_PROMPT: str = (
