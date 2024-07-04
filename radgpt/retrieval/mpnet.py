@@ -1,29 +1,30 @@
 """
-BERT- and RadBERT- based retriever class implementations.
+MPNet- based retriever class implementations.
 
 Author(s):
     Michael Yao @michael-s-yao
     Allison Chae @allisonjchae
 
 Citation(s):
-    [1] Yan A, McAuley J, Lu X, Du J, Chang EY, Gentili A, Hsu C. RadBERT:
-        Adapting transformer-based language models to radiology. Radiology:
-        Artificial Intelligence 4(4): e210258. (2022). doi: 10.1148/ryai.210258
+    [1] Song K, Tan X, Qin T, Lu J. Li T. MPNet: Masked and permuted pre-
+        training for language understanding. arXiv Preprint. (2020). doi:
+        10.48550/arXiv.2004.09297
 
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import faiss
 import os
 import torch
-from transformers import AutoConfig, AutoTokenizer, AutoModel
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
 from pathlib import Path
 from typing import Optional, Sequence, Tuple, Union
 
 from .base import Corpus, Document, Retriever
 
 
-class BERTRetriever(Retriever):
-    model_name: str = "FacebookAI/roberta-base"
+class MPNetRetriever(Retriever):
+    model_name: str = "sentence-transformers/all-mpnet-base-v2"
 
     def __init__(
         self,
@@ -38,17 +39,18 @@ class BERTRetriever(Retriever):
             corpus: a corpus of documents to retrieve from.
             index_dir: the cache path to load and save the index from.
         """
-        super(BERTRetriever, self).__init__(
+        super(MPNetRetriever, self).__init__(
             corpus=corpus, index_dir=index_dir, **kwargs
         )
-        config = AutoConfig.from_pretrained(self.model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModel.from_pretrained(self.model_name, config=config)
+        self.model = AutoModel.from_pretrained(self.model_name)
+        *_, last = self.model.parameters()
+        hidden_size = last.size(dim=-1)
 
         if os.path.isfile(self.index_fn):
             self.index = faiss.read_index(self.index_fn)
             return
-        self.index = faiss.IndexFlatIP(config.hidden_size)
+        self.index = faiss.IndexFlatIP(hidden_size)
         embeddings = map(lambda doc: self.embed(doc.text), self.corpus)
         for vec in embeddings:
             self.index.add(vec.detach().cpu().numpy())
@@ -83,10 +85,13 @@ class BERTRetriever(Retriever):
         Returns:
             The embedding of the query using the BERT model.
         """
-        embedding = self.model(**self.tokenizer(query, return_tensors="pt"))
-        out = embedding.pooler_output
-        return out / torch.linalg.norm(out, dim=-1)
-
-
-class RadBERTRetriever(BERTRetriever):
-    model_name: str = "zzxslp/RadBERT-RoBERTa-4m"
+        tokens = self.tokenizer(query, return_tensors="pt", truncation=True)
+        output = self.model(**tokens)
+        mask = tokens["attention_mask"].unsqueeze(dim=-1).expand(
+            output[0].size()
+        )
+        mask = mask.float()
+        embedding = torch.sum(output[0] * mask, dim=1) / torch.clamp(
+            mask.sum(dim=1), min=torch.finfo(torch.float32).eps
+        )
+        return F.normalize(embedding, p=2, dim=1)

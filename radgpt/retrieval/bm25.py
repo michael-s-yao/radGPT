@@ -25,7 +25,9 @@ class BM25Retriever(Retriever):
             corpus: a corpus of documents to retrieve from.
             method: the BM25 variant to use. Default `lucene`.
         """
-        super(BM25Retriever, self).__init__(corpus, **kwargs)
+        super(BM25Retriever, self).__init__(
+            corpus=corpus, index_dir=None, **kwargs
+        )
         self.retriever = bm25s.BM25(corpus=corpus, method=method)
         self.retriever.index(bm25s.tokenize(corpus))
 

@@ -121,3 +121,4 @@ batch_queries.json
 *.tar
 *.index
 evidence/
+*.jsonl

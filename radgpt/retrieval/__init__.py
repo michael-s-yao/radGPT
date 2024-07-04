@@ -7,13 +7,16 @@ Author(s):
 
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
+import numpy as np
 import sys
 from inspect import isclass
-from typing import Sequence
+from typing import Optional, Sequence
 
-from .base import Document, Corpus, Retriever
+from .base import Document, Corpus, Retriever, RandomRetriever
 from .bm25 import BM25Retriever
 from .bert import BERTRetriever, RadBERTRetriever
+from .mpnet import MPNetRetriever
+from .medcpt import MedCPTRetriever
 
 
 __all__ = [
@@ -21,8 +24,14 @@ __all__ = [
     "Document",
     "Retriever",
     "BM25Retriever",
+    "MedCPTRetriever",
+    "MPNetRetriever",
     "BERTRetriever",
-    "RadBERTRetriever"
+    "RadBERTRetriever",
+    "RandomRetriever",
+    "list_retrievers",
+    "list_corpuses",
+    "get_retriever"
 ]
 
 
@@ -59,14 +68,21 @@ def list_corpuses() -> Sequence[str]:
     ]
 
 
-def get_retriever(retriever: str, corpus_name: str, **kwargs) -> Retriever:
+def get_retriever(
+    retriever: str,
+    corpus_name: Optional[str] = None,
+    corpus_dataset: Optional[np.ndarray] = None,
+    **kwargs
+) -> Retriever:
     """
     Retrieves the requested retriever object.
     Input:
         retriever: the name of the retriever to use.
-        corpus_name: the name of the reference corpus to use.
+        corpus_name: the name of the corpus dataset to load if initializing
+            from a named dataset.
+        corpus_dataset: the corpus dataset if initializing from an array.
     Returns:
         The requested retriever object.
     """
-    corpus = Corpus(corpus_name)
+    corpus = Corpus(name=corpus_name, dataset=corpus_dataset)
     return getattr(sys.modules[__name__], retriever)(corpus=corpus, **kwargs)

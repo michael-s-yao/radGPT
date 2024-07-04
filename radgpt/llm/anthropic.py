@@ -8,9 +8,11 @@ Author(s):
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import json
+import os
+from configparser import RawConfigParser
 from anthropic import AnthropicBedrock, NotGiven
 from pathlib import Path
-from typing import Optional, Sequence, Union
+from typing import Sequence, Union
 
 from .base import LLM
 
@@ -21,19 +23,26 @@ class ClaudeSonnet(LLM):
     def __init__(
         self,
         seed: int = 42,
-        aws_config_dir: Union[Path, str] = Path("~/.aws"),
-        profile: Optional[str] = "default",
+        credentials_fn: Union[Path, str] = os.path.expanduser(
+            "~/.aws/credentials"
+        ),
+        profile: str = "default",
         **kwargs
     ):
         """
         Args:
             seed: random seed. Default 42.
-            aws_config_dir: the directory path containing the AWS
-                profile configuration and credentials.
-            profile: the AWS profile to use.
+            credentials_fn: the filename to the AWS credentials.
+            profile: the credentials profile to use. Default `default`.
         """
         super(ClaudeSonnet, self).__init__(seed=seed, **kwargs)
-        self.client = AnthropicBedrock(aws_region="us-east-1")
+        config = RawConfigParser()
+        config.read(credentials_fn)
+        self.client = AnthropicBedrock(
+            aws_access_key=config.get(profile, "aws_access_key_id"),
+            aws_secret_key=config.get(profile, "aws_secret_access_key"),
+            aws_region="us-east-1"
+        )
 
     def query(self, prompt: str) -> Sequence[str]:
         """

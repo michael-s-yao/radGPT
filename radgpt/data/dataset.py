@@ -1,5 +1,5 @@
 """
-Reads the raw Clinical Challenge QA and MIMIC-IV datasets.
+Reads the datasets of patient one-liner case descriptions.
 
 Author(s):
     Michael Yao @michael-s-yao
@@ -13,18 +13,54 @@ Citation(s):
         Pollard TJ, Hao S, Moody B, Gow B, Lehman LH, Celi LA, Mark RG.
         MIMIC-IV, a freely accessible electronic health record dataset. Sci
         Data 10(1). (2023). doi: 10.1038/s41597-022-01899-x
+    [3] Jin D, Pan E, Oufattole N, Weng W, Fang H, Szolovits. What disease
+        does this patient have? A large-scale open domain question answering
+        dataset from medical exams. Appl Sci 11(14): 6421. (2021).
+        doi: 10.3390/app11146421
+    [4] Savage T, Nayak A, Gallo R, Rangan E, Chen JH. Diagnostic reasoning
+        prompts reveal the potential for large language model
+        interpretability in medicine. npj Digit Med 7(20). (2024).
+        doi: 10.1038/s41746-024-01010-1
+
+Links to OpenAI ChatGPT Conversations for the Synthetic Dataset:
+    [a] Breast Prompts:
+        https://chatgpt.com/share/625436fd-87dd-4be3-afd0-b59529d816ff
+    [b] Cardiac Prompts:
+        https://chatgpt.com/share/2d52c0b2-7bcd-4cce-ae14-3af033a3b225
+    [c] Gastrointestinal Prompts:
+        https://chatgpt.com/share/5cd86b6d-31dd-4eb1-8aa8-a22b955ddeac
+    [d] Gyn and OB Prompts:
+        https://chatgpt.com/share/b538a30a-9b53-414a-8644-a9a247e065d9
+    [e] Musculoskeletal Prompts:
+        https://chatgpt.com/share/9bd5164e-a923-4cfb-9cdb-64cb5384c531
+    [f] Neurologic Prompts:
+        https://chatgpt.com/share/5be73ee7-ed4a-4bb7-9923-c331d8f5023c
+    [g] Pediatric Prompts:
+        https://chatgpt.com/share/5913fb17-dee0-473c-835d-b0a05f78f456
+    [h] Polytrauma Prompts:
+        https://chatgpt.com/share/df0d95f7-1e61-4ae4-87be-fcf58960685e
+    [j] Thoracic Prompts:
+        https://chatgpt.com/share/f422a439-4a1b-4853-be32-d9e52efc7e56
+    [k] Urologic Prompts:
+        https://chatgpt.com/share/20dd9c03-7a40-484c-86c5-7f82695effa7
+    [m] Vascular Prompts:
+        https://chatgpt.com/share/289ac958-3f1f-46d8-9868-73360763ded5
 
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import censusname
-import numpy as np
 import hashlib
+import jsonlines
+import numpy as np
 import os
 import pandas as pd
 import random
 import re
+from datasets import load_dataset
 from pathlib import Path
 from typing import Sequence, Union
+
+from .utils import split_into_sentences
 
 
 def convert_case_to_one_liner(case: str) -> str:
@@ -35,10 +71,7 @@ def convert_case_to_one_liner(case: str) -> str:
     Returns:
         The first sentence of the patient case.
     """
-    case = " ".join(case.splitlines())
-    if case.count(". ") <= 1:
-        return case
-    return case.split(". ", 1)[0] + "."
+    return next(iter(split_into_sentences(case)))
 
 
 def hashme(string: str) -> str:
@@ -52,6 +85,23 @@ def hashme(string: str) -> str:
     hash_gen = hashlib.sha512()
     hash_gen.update(string.encode())
     return str(hash_gen.hexdigest())
+
+
+def read_synthetic_dataset(
+    dataset_url: str = (
+        "https://docs.google.com/spreadsheets/d/"
+        "1PNu-rAbQG3SAAhQ7TZqOaS4cT7V8033dKVDguG4Llxs/"
+        "export?gid=1839683815&format=csv"
+    )
+) -> np.ndarray:
+    """
+    Returns the synthetic LLM-generated dataset of patient one-liners.
+    Input:
+        dataset_url: The URL to the dataset.
+    Returns:
+        An array of all the patient one-liners in the synthetic dataset.
+    """
+    return pd.read_csv(dataset_url)["case_readable"].to_numpy()
 
 
 def read_medbullets_dataset(
@@ -178,3 +228,38 @@ def read_mimic_iv_dataset(
 
         one_liners.append(txt)
     return np.array(one_liners)
+
+
+def read_medqa_dataset(
+    hf_dataset_name: str = "GBaker/MedQA-USMLE-4-options"
+) -> np.ndarray:
+    """
+    Returns the MedQA USMLE Step 2 and 3 dataset. Following prior work from
+    Savage et al. (2024), we only use the Step 2 and 3 questions in the
+    original MedQA test dataset partition.
+    Input:
+        hf_dataset_name: the name of dataset in HuggingFace.
+    Returns:
+        An array containing all the questions asked in the MedQA dataset.
+    """
+    ds = load_dataset(hf_dataset_name)["test"]
+    questions, metadata = np.array(ds["question"]), np.array(ds["meta_info"])
+    questions = questions[np.where(metadata == "step2&3")[0]]
+    one_liners = map(
+        lambda case: " ".join(split_into_sentences(case)[:2]), questions
+    )
+    return np.array(list(one_liners))
+
+
+def read_nejm_dataset(nejm_fn: Union[Path, str] = "nejm.jsonl") -> np.ndarray:
+    """
+    Returns the NEJM Clinical Records dataset as described in Savage et al.
+    (2024).
+    Input:
+        nejm_fn: the file path to the scraped dataset.
+    Returns:
+        An array containing all the cases in the dataset.
+    """
+    with jsonlines.open(nejm_fn) as reader:
+        ds = filter(lambda item: len(item["case"]), reader)
+        return np.array(list(map(lambda item: item["case"], ds)))

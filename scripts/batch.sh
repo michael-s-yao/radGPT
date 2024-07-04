@@ -14,6 +14,12 @@ for ds in "synthetic" "medbullets" "jama_cc" "mimic_iv"; do
       -d $ds \
       --savedir $savedir \
       --seed $seed \
-      --by-$metric
+      --by-$metric \
+      --cot.reasoning_method default \
+      --rag.retriever BM25Retriever \
+      --rag.top_k 1 \
+      --rag.corpus MedRAG/textbooks \
+      --icl.retriever MPNetRetriever \
+      --icl.num_examples 4
   done
 done

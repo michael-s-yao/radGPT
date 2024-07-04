@@ -13,6 +13,7 @@ from pytorch_lightning import seed_everything
 from typing import Any, Dict, Optional, Sequence, Union
 
 from ..acr import AppropriatenessCriteria
+from ..retrieval import Document
 
 
 # Baseline user prompt without any engineering.
@@ -27,6 +28,10 @@ USER_PROMPT_RAG: str = (
     "Here is some context for you to consider:\n{context}\n\n"
     f"### User:\n{USER_PROMPT_BASE}\n\n### Assistant:\n"
 )
+
+
+# User prompt for in-context learning (ICL).
+USER_PROMPT_ICL: str = f"{{context}}\n\n{USER_PROMPT_BASE}"
 
 
 class LLM(abc.ABC):
@@ -71,7 +76,8 @@ def get_top_k_panels(
     method: str,
     uid: Optional[str] = None,
     batch_if_available: bool = True,
-    rag_context: Optional[Sequence[str]] = None
+    rag_context: Optional[Sequence[Document]] = None,
+    icl_context: Optional[Sequence[str]] = None
 ) -> Union[Sequence[str], Dict[str, Any]]:
     """
     Returns the top k predictions for an input patient case.
@@ -84,15 +90,20 @@ def get_top_k_panels(
         uid: an optional unique ID for the query.
         batch_if_available: generate a batch API request if available.
         rag_context: an optional list of contexts to use for RAG.
+        icl_context: an optional list of contexts to use for ICL.
     Returns:
         The top k predictions from the LLM, or a batch request if applicable.
     """
-    if method.lower() in ["prompting", "rag"]:
+    if method.lower() == "prompting":
         prompt = USER_PROMPT_BASE.format(case=case)
     elif method.lower() == "rag":
         prompt = USER_PROMPT_RAG.format(
             case=case, context=("\n".join([doc.text for doc in rag_context]))
         )
+    elif method.lower() == "cot":
+        prompt = USER_PROMPT_BASE.format(case=case)
+    elif method.lower() == "icl":
+        prompt = USER_PROMPT_ICL.format(case=case, context=icl_context)
     else:
         raise NotImplementedError
 

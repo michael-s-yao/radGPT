@@ -1,24 +1,39 @@
+"""
+Interface for working with datasets of patient one-liner case descriptions.
+
+Author(s):
+    Michael Yao @michael-s-yao
+    Allison Chae @allisonjchae
+
+Licensed under the MIT License. Copyright University of Pennsylvania 2024.
+"""
 import pandas as pd
 from typing import Optional
 
-from .ccqa import (
+from .dataset import (
     convert_case_to_one_liner,
     hashme,
+    read_synthetic_dataset,
     read_mimic_iv_dataset,
     read_jama_cc_dataset,
-    read_medbullets_dataset
+    read_medbullets_dataset,
+    read_medqa_dataset,
+    read_nejm_dataset
 )
-from .synthetic import read_synthetic_dataset
+from . import utils
 
 
 __all__ = [
     "convert_case_to_one_liner",
     "hashme",
+    "read_medqa_dataset",
     "read_mimic_iv_dataset",
+    "read_nejm_dataset",
     "read_jama_cc_dataset",
     "read_medbullets_dataset",
     "read_synthetic_dataset",
-    "load_case_labels"
+    "load_case_labels",
+    "utils"
 ]
 
 
@@ -42,7 +57,9 @@ def load_case_labels(
         "synthetic": 1839683815,
         "medbullets": 0,
         "jama_cc": 226315523,
-        "mimic_iv": 42526063
+        "mimic_iv": 42526063,
+        "nejm": 1217489264,
+        "medqa": 1051234352,
     }
     labels_url: str = (
         "https://docs.google.com/spreadsheets/d/"
