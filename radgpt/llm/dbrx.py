@@ -73,17 +73,20 @@ class DBRXInstruct(LLM):
         tokens = tokens.to(self.model.device)
         with torch.inference_mode():
             with self.autocast_context:
-                enc = self.model.generate(
-                    input_ids=tokens,
-                    max_new_tokens=self.max_new_tokens,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    repetition_penalty=self.repetition_penalty,
-                    use_cache=True,
-                    do_sample=True,
-                    eos_token_id=self.tokenizer.eos_token_id,
-                    pad_token_id=self.tokenizer.pad_token_id,
-                )
+                try:
+                    enc = self.model.generate(
+                        input_ids=tokens,
+                        max_new_tokens=self.max_new_tokens,
+                        top_p=self.top_p,
+                        top_k=self.top_k,
+                        repetition_penalty=self.repetition_penalty,
+                        use_cache=True,
+                        do_sample=True,
+                        eos_token_id=self.tokenizer.eos_token_id,
+                        pad_token_id=self.tokenizer.pad_token_id,
+                    )
+                except RuntimeError as e:
+                    return [str(e)]
         output = next(iter(self.tokenizer.batch_decode(enc)))
         output = output.split("<|im_start|>assistant\n")[-1]
         output = output.split("<|im_end|>")[0]

@@ -9,13 +9,38 @@ Author(s):
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import click
+import enlighten
 import json
+import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import radgpt
+
+
+DATASETS_TO_PRETTY_NAMES: Dict[str, str] = {
+    "synthetic": "Synthetic",
+    "medbullets": "Medbullets USMLE",
+    "medqa": "MedQA USMLE",
+    "jama_cc": "JAMA Clinical Challenges",
+    "nejm": "NEJM Case Records",
+    "mimic_iv": "BIDMC"
+}
+
+
+METHODS_TO_PRETTY_NAMES: Dict[str, str] = {
+    "prompting": "Baseline",
+    "icl": (
+        "In-Context Learning ({icl_num_examples} Samples from {icl_retriever})"
+    ),
+    "rag": (
+        "Retrieval-Augmented Generation "
+        "({rag_top_k} Documents from {rag_corpus} using {rag_retriever})"
+    ),
+    "cot": "Chain-of-Thought Prompting (`{cot_reasoning_method}` Reasoning)"
+}
 
 
 @click.command()
@@ -121,6 +146,12 @@ import radgpt
     default=False,
     help="Fast development run to test the implementation."
 )
+@click.option(
+    "--verbose/--quiet",
+    default=True,
+    show_default=True,
+    help="Turn on verbose outputs and logging."
+)
 def main(
     dataset: str,
     llm: str,
@@ -135,9 +166,16 @@ def main(
     by_panel: bool = True,
     savedir: Optional[Union[Path, str]] = None,
     fast_dev_run: bool = False,
+    verbose: bool = True,
     **kwargs
 ):
     """Aligning LLMs with ACR Appropriateness Criteria."""
+    logging.basicConfig(
+        level=(logging.INFO if verbose else logging.CRITICAL),
+        format="%(levelname)-8s %(message)s"
+    )
+    logger = logging.getLogger(__name__)
+
     ac = radgpt.AppropriatenessCriteria()
     savepath = None
     _key = "panel" if by_panel else "topic"
@@ -161,13 +199,12 @@ def main(
         getattr(radgpt.data, f"read_{dataset}_dataset")()
     )
     patient_cases = list(set(list(patient_cases)))
-    total_case_count = len(patient_cases)
 
     # Instantiate the LLM client.
     llm_init_kwargs = {"seed": seed}
     if method.lower() == "rag":
         llm_init_kwargs["repetition_penalty"] = 1.5
-    llm = getattr(radgpt.llm, llm)(**llm_init_kwargs)
+    llm, llm_name = getattr(radgpt.llm, llm)(**llm_init_kwargs), llm
     system_prompt = radgpt.llm.get_system_prompt(
         method, rationale=cot_reasoning_method
     )
@@ -226,59 +263,137 @@ def main(
     # Evaluate the LLM according to the ACR Appropriateness Criteria.
     count = 0
     all_results = {}
-    for idx, case in enumerate(patient_cases):
-        gt = y_gt[y_gt["case"] == radgpt.data.hashme(str(case))][
-            "panel" if by_panel else "topic"
-        ]
-        gt = re.split(r",(?=\S)", gt.item())
-        if downloaded_results is not None:
-            ypreds = downloaded_results[idx]
-        else:
-            rag_context, icl_context = None, None
-            if method.lower() == "rag":
-                rag_context = retriever.retrieve(str(case), k=rag_top_k)
-            elif method.lower() == "icl":
-                icl_context = retriever.retrieve(str(case), k=icl_num_examples)
-                icl_labels = []
-                for ref_case in icl_context:
-                    ref_gt = y_ref[
-                        y_ref["case"] == radgpt.data.hashme(str(ref_case))
-                    ]
-                    ref_gt = ref_gt["panel" if by_panel else "topic"].item()
-                    icl_labels.append(
-                        json.dumps({"answer": re.split(r",(?=\S)", ref_gt)})
+    with enlighten.get_manager(enabled=verbose) as mgr:
+        mgr.status_bar(
+            status_format=u"{llm}{fill}{method}{fill}{eval_method}",
+            color="bold_underline_bright_white_on_lightslategray",
+            justify=enlighten.Justify.CENTER,
+            llm=llm_name,
+            method=METHODS_TO_PRETTY_NAMES[method].format(
+                icl_num_examples=icl_num_examples,
+                icl_retriever=icl_retriever,
+                cot_reasoning_method=cot_reasoning_method,
+                rag_top_k=rag_top_k,
+                rag_retriever=rag_retriever,
+                rag_corpus=rag_corpus
+            ),
+            eval_method=(
+                f"ACR AC {'Panel' if by_panel else 'Topic'} Evaluation"
+            ),
+            autorefresh=True,
+            min_delta=0.5
+        )
+        mgr.status_bar(
+            status_format=u"{radgpt}{fill}{link}{fill}Seed: {seed}",
+            link=mgr.term.link(
+                "https://gravitas.acr.org/acportal",
+                "ACR Appropriateness Criteria"
+            ),
+            radgpt=mgr.term.link(
+                "https://github.com/michael-s-yao/radGPT", "RadGPT"
+            ),
+            position=1,
+            fill="-",
+            seed=seed,
+            justify=enlighten.Justify.CENTER
+        )
+
+        terminal = mgr.term
+        bar_fmt = (
+            u"{desc}{desc_pad}{percentage:3.0f}%|{bar}| "
+            u"C:" + mgr.term.green3(u"{count_0:{len_total}d}") + u" "
+            u"I:" + mgr.term.red2(u"{count_2:{len_total}d}") + u" "
+            u"E:" + terminal.yellow2(u"{count_1:{len_total}d}") + u" "
+            u"[{elapsed}<{eta}, {rate:.2f}{unit_pad}{unit}/s]"
+        )
+        with mgr.counter(
+            total=len(patient_cases),
+            desc=DATASETS_TO_PRETTY_NAMES[dataset.lower()],
+            unit="cases",
+            color='green3',
+            bar_format=bar_fmt
+        ) as success:
+            error = success.add_subcounter("yellow2")
+            failure = success.add_subcounter("red2")
+
+            for idx, case in enumerate(patient_cases):
+                gt = y_gt[y_gt["case"] == radgpt.data.hashme(str(case))][
+                    "panel" if by_panel else "topic"
+                ]
+                gt = re.split(r",(?=\S)", gt.item())
+                if downloaded_results is not None:
+                    ypreds = downloaded_results[idx]
+                else:
+                    rag_context, icl_context = None, None
+                    if method.lower() == "rag":
+                        rag_context = retriever.retrieve(
+                            str(case), k=rag_top_k
+                        )
+                    elif method.lower() == "icl":
+                        icl_context = retriever.retrieve(
+                            str(case), k=icl_num_examples
+                        )
+                        icl_labels = []
+                        for ref_case in icl_context:
+                            ref_gt = y_ref[
+                                y_ref["case"] == radgpt.data.hashme(
+                                    str(ref_case)
+                                )
+                            ]
+                            ref_gt = (
+                                ref_gt["panel" if by_panel else "topic"].item()
+                            )
+                            icl_labels.append(
+                                json.dumps({
+                                    "answer": re.split(r",(?=\S)", ref_gt)
+                                })
+                            )
+                        icl_context = "\n\n".join([
+                            f"{ref_prompt}\n{ref_label}"
+                            for ref_prompt, ref_label in zip(
+                                icl_context, icl_labels
+                            )
+                        ])
+                    ypreds = radgpt.llm.get_top_k_panels(
+                        case=str(case),
+                        criteria=ac,
+                        llm=llm,
+                        top_k=1,
+                        method=method,
+                        uid=f"{run_id}_{idx}",
+                        rag_context=rag_context,
+                        icl_context=icl_context
                     )
-                icl_context = "\n\n".join([
-                    f"{ref_prompt}\n{ref_label}"
-                    for ref_prompt, ref_label in zip(icl_context, icl_labels)
-                ])
-            ypreds = radgpt.llm.get_top_k_panels(
-                case=str(case),
-                criteria=ac,
-                llm=llm,
-                top_k=1,
-                method=method,
-                uid=f"{run_id}_{idx}",
-                rag_context=rag_context,
-                icl_context=icl_context
-            )
-        if isinstance(ypreds, dict):
-            if isinstance(all_results, dict):
-                all_results = []
-            all_results.append(ypreds)
-        else:
-            count += any([
-                lbl.lower().replace(" ", "") in pred.lower().replace(" ", "")
-                for pred in ypreds for lbl in gt
-            ])
-            all_results[idx] = {"ypred": ypreds, "ygt": gt}
+                if isinstance(ypreds, dict):
+                    if isinstance(all_results, dict):
+                        all_results = []
+                    all_results.append(ypreds)
+                elif any(["`inf`, `nan`" in lbl for lbl in ypreds]):
+                    error.update()
+                    continue
+                else:
+                    case_correct = any([
+                        lbl.lower().replace(" ", "") in (
+                            pred.lower().replace(" ", "")
+                        )
+                        for pred in ypreds for lbl in gt
+                    ])
+                    count += case_correct
+                    if case_correct:
+                        success.update()
+                    else:
+                        failure.update()
+                    all_results[idx] = {"ypred": ypreds, "ygt": gt}
 
-            if savepath is not None:
-                with open(savepath, "w") as f:
-                    json.dump(all_results, f, indent=2)
+                    if savepath is not None:
+                        with open(savepath, "w") as f:
+                            json.dump(all_results, f, indent=2)
 
-        if fast_dev_run:
-            exit()
+                if fast_dev_run:
+                    exit()
+                logger.info(f"Case {1 + idx}: {case}")
+                logger.info(f"  Predicted Label(s): {', '.join(ypreds)}")
+                logger.info(f"  Ground-Truth Label(s): {', '.join(gt)}")
 
     if isinstance(all_results, list):
         submission = llm.submit_batch_query(all_results)
@@ -287,8 +402,8 @@ def main(
             json.dump(submitted_jobs, f, indent=2)
         click.echo(submission)
     else:
-        acc = count / total_case_count
-        click.echo(f"Accuracy: {acc:.6f}")
+        acc = count / len(all_results.keys())
+        click.secho(f"Accuracy: {acc:.6f}", bold=True)
 
 
 if __name__ == "__main__":

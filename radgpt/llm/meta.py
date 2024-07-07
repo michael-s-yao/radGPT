@@ -63,17 +63,20 @@ class Llama3Instruct(LLM):
         messages.append({"role": "user", "content": prompt})
         with torch.inference_mode():
             with self.autocast_context:
-                output = self.pipeline(
-                    messages,
-                    max_new_tokens=self.max_new_tokens,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    repetition_penalty=self.repetition_penalty,
-                    use_cache=True,
-                    do_sample=True,
-                    eos_token_id=self.terminators,
-                    pad_token_id=self.pipeline.tokenizer.eos_token_id,
-                )
+                try:
+                    output = self.pipeline(
+                        messages,
+                        max_new_tokens=self.max_new_tokens,
+                        top_p=self.top_p,
+                        top_k=self.top_k,
+                        repetition_penalty=self.repetition_penalty,
+                        use_cache=True,
+                        do_sample=True,
+                        eos_token_id=self.terminators,
+                        pad_token_id=self.pipeline.tokenizer.eos_token_id,
+                    )
+                except RuntimeError as e:
+                    return [str(e)]
         output = output[0]["generated_text"][-1]["content"]
         try:
             output = json.loads(output)["answer"]
