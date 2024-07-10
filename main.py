@@ -39,7 +39,7 @@ METHODS_TO_PRETTY_NAMES: Dict[str, str] = {
         "Retrieval-Augmented Generation "
         "({rag_top_k} Documents from {rag_corpus} using {rag_retriever})"
     ),
-    "cot": "Chain-of-Thought Prompting (`{cot_reasoning_method}` Reasoning)"
+    "cot": "Chain-of-Thought Prompting ({cot_reasoning_method} Reasoning)"
 }
 
 
@@ -192,6 +192,17 @@ def main(
             savedir, f"{run_id}.json"
         )
 
+    if savepath is not None and os.path.isfile(savepath):
+        with open(savepath, "r") as f:
+            cached_results = json.load(f)
+        num_correct = 0
+        for _, cache_labels in cached_results.items():
+            ypreds, gt = cache_labels["ypred"], cache_labels["ygt"]
+            num_correct += radgpt.utils.score(ypreds, gt)
+        acc = 100.0 * num_correct / len(cached_results.keys())
+        click.secho(f"Accuracy: {acc:.6f}", bold=True)
+        return
+
     # Load the specified dataset of patient one-liners.
     y_gt = radgpt.data.load_case_labels(dataset=dataset)
     patient_cases = filter(
@@ -258,12 +269,12 @@ def main(
                     )
             else:
                 click.echo(f"Status: {_batch.status}")
-                exit()
+                return
 
     # Evaluate the LLM according to the ACR Appropriateness Criteria.
     count = 0
     all_results = {}
-    with enlighten.get_manager(enabled=verbose) as mgr:
+    with enlighten.get_manager() as mgr:
         mgr.status_bar(
             status_format=u"{llm}{fill}{method}{fill}{eval_method}",
             color="bold_underline_bright_white_on_lightslategray",
@@ -272,7 +283,7 @@ def main(
             method=METHODS_TO_PRETTY_NAMES[method].format(
                 icl_num_examples=icl_num_examples,
                 icl_retriever=icl_retriever,
-                cot_reasoning_method=cot_reasoning_method,
+                cot_reasoning_method=str(cot_reasoning_method).title(),
                 rag_top_k=rag_top_k,
                 rag_retriever=rag_retriever,
                 rag_corpus=rag_corpus
@@ -364,6 +375,10 @@ def main(
                         rag_context=rag_context,
                         icl_context=icl_context
                     )
+                    if method.lower() == "cot" and (
+                        cot_reasoning_method.lower() == "bayesian"
+                    ):
+                        ypreds = [_y[:_y.find("rationale")] for _y in ypreds]
                 if isinstance(ypreds, dict):
                     if isinstance(all_results, dict):
                         all_results = []
@@ -372,12 +387,7 @@ def main(
                     error.update()
                     continue
                 else:
-                    case_correct = any([
-                        lbl.lower().replace(" ", "") in (
-                            pred.lower().replace(" ", "")
-                        )
-                        for pred in ypreds for lbl in gt
-                    ])
+                    case_correct = radgpt.utils.score(ypreds, gt)
                     count += case_correct
                     if case_correct:
                         success.update()
@@ -390,7 +400,7 @@ def main(
                             json.dump(all_results, f, indent=2)
 
                 if fast_dev_run:
-                    exit()
+                    return
                 logger.info(f"Case {1 + idx}: {case}")
                 logger.info(f"  Predicted Label(s): {', '.join(ypreds)}")
                 logger.info(f"  Ground-Truth Label(s): {', '.join(gt)}")
@@ -402,7 +412,7 @@ def main(
             json.dump(submitted_jobs, f, indent=2)
         click.echo(submission)
     else:
-        acc = count / len(all_results.keys())
+        acc = 100.0 * count / len(all_results.keys())
         click.secho(f"Accuracy: {acc:.6f}", bold=True)
 
 

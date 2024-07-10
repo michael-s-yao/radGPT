@@ -5,7 +5,7 @@ method=$2
 metric=${3:-panel}
 savedir=${4:-results}
 
-for ds in "synthetic" "medbullets" "jama_cc" "mimic_iv"; do
+for ds in "synthetic" "medbullets" "jama_cc" "mimic_iv" "nejm"; do
   echo $ds
   for seed in 42 43 44 45 46; do
     python main.py \

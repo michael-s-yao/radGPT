@@ -70,6 +70,21 @@ def get_experiment_options() -> Sequence[str]:
     return list(options)
 
 
+def score(preds: Sequence[str], gts: Sequence[str]) -> bool:
+    """
+    Scores a set of predictions compared to ground-truth labels.
+    Input:
+        preds: a list of the predicted label(s).
+        gts: a list of the true ground-truth label(s).
+    Returns:
+        Whether at least one ground-truth label is in the list of predictions.
+    """
+    return any([
+        y.lower().replace(" ", "") in ypred.lower().replace(" ", "")
+        for ypred in preds for y in gts
+    ])
+
+
 def split_into_sentences(text: str) -> Sequence[str]:
     """
     Splits an input text paragraph into its respective sentences. This
