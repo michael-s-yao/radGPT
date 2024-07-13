@@ -17,7 +17,6 @@ from .dataset import (
     read_mimic_iv_dataset,
     read_jama_cc_dataset,
     read_medbullets_dataset,
-    read_medqa_dataset,
     read_nejm_dataset
 )
 from . import utils
@@ -26,7 +25,6 @@ from . import utils
 __all__ = [
     "convert_case_to_one_liner",
     "hashme",
-    "read_medqa_dataset",
     "read_mimic_iv_dataset",
     "read_nejm_dataset",
     "read_jama_cc_dataset",
@@ -59,7 +57,6 @@ def load_case_labels(
         "jama_cc": 226315523,
         "mimic_iv": 42526063,
         "nejm": 1217489264,
-        "medqa": 1051234352,
     }
     labels_url: str = (
         "https://docs.google.com/spreadsheets/d/"

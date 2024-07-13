@@ -12,6 +12,7 @@ Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 import json
 import jsonlines
 import os
+import re
 import sys
 from bs4 import BeautifulSoup
 from copy import deepcopy
@@ -66,11 +67,16 @@ def parse_table_rows_to_json(
         )
         scenario_obj = {col_names[0]: scenario, col_names[1]: scenario_id}
         scenario_obj["Studies"] = []
-        for r in scenario_opts:
-            r = deepcopy(r)
-            r.pop(col_names[0])
-            r.pop(col_names[1])
-            scenario_obj["Studies"].append(r)
+        for rec in scenario_opts:
+            if "Appropriateness Category" not in rec.keys():
+                continue
+            rec = deepcopy(rec)
+            rec.pop(col_names[0])
+            rec.pop(col_names[1])
+            rec["Appropriateness Category"] = re.sub(
+                r"\s{2,}", " ", rec["Appropriateness Category"]
+            )
+            scenario_obj["Studies"].append(rec)
         studies.append(scenario_obj)
     return studies
 

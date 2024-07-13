@@ -230,27 +230,6 @@ def read_mimic_iv_dataset(
     return np.array(one_liners)
 
 
-def read_medqa_dataset(
-    hf_dataset_name: str = "GBaker/MedQA-USMLE-4-options"
-) -> np.ndarray:
-    """
-    Returns the MedQA USMLE Step 2 and 3 dataset. Following prior work from
-    Savage et al. (2024), we only use the Step 2 and 3 questions in the
-    original MedQA test dataset partition.
-    Input:
-        hf_dataset_name: the name of dataset in HuggingFace.
-    Returns:
-        An array containing all the questions asked in the MedQA dataset.
-    """
-    ds = load_dataset(hf_dataset_name)["test"]
-    questions, metadata = np.array(ds["question"]), np.array(ds["meta_info"])
-    questions = questions[np.where(metadata == "step2&3")[0]]
-    one_liners = map(
-        lambda case: " ".join(split_into_sentences(case)[:2]), questions
-    )
-    return np.array(list(one_liners))
-
-
 def read_nejm_dataset(nejm_fn: Union[Path, str] = "nejm.jsonl") -> np.ndarray:
     """
     Returns the NEJM Clinical Records dataset as described in Savage et al.

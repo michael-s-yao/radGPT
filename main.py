@@ -15,7 +15,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Sequence, Union
 
 import radgpt
 
@@ -41,6 +41,49 @@ METHODS_TO_PRETTY_NAMES: Dict[str, str] = {
     ),
     "cot": "Chain-of-Thought Prompting ({cot_reasoning_method} Reasoning)"
 }
+
+
+def compute_imaging_results_from_topic_eval(
+    topic_results: Dict[str, Dict[str, Sequence[str]]],
+    ac: radgpt.AppropriatenessCriteria
+) -> Dict[str, float]:
+    """
+    Computes the imaging statistics from an ACR AC topic evaluation.
+    Input:
+        topic_results: a dictionary of the ACR AC topic evaluation results.
+        ac: an instance of the ACR Appropriateness Criteria.
+    Returns:
+        A dictionary containing the following values:
+            acc: the accuracy of the imaging recommendations.
+            fpr: the false positive rate corresponding to the rate at which
+                unnecessary imaging studies are ordered.
+            fnr: the false negative rate corresponding to the rate at which
+                imaging studies were required but not obtained.
+    """
+    num_correct, num_cases = 0, len(topic_results.keys())
+    nfp, nfn = 0, 0
+    no_img_sts = ac.NO_IMAGING_INDICATION
+    for _, cache_labels in topic_results.items():
+        ypreds, gt = cache_labels["ypred"], cache_labels["ygt"]
+        ypreds = list(
+            filter(
+                lambda tt: any([bool(tt in yy) for yy in ypreds]),
+                ac.topics
+            )
+        )
+        if len(ypreds) == 0:
+            num_cases -= 1
+            continue
+        ypreds = sum(
+            [ac.map_topic_to_imaging_study(yy) for yy in ypreds], []
+        )
+        gt = sum([ac.map_topic_to_imaging_study(yy) for yy in gt], [])
+        nfn += int((ypreds == [no_img_sts]) and (no_img_sts not in gt))
+        nfp += int((gt == [no_img_sts]) and (no_img_sts not in ypreds))
+        num_correct += radgpt.utils.score(ypreds, gt)
+    acc = 100.0 * num_correct / num_cases
+    fpr, fnr = 100.0 * nfp / num_cases, 100.0 * nfn / num_cases
+    return {"acc": acc, "fpr": fpr, "fnr": fnr}
 
 
 @click.command()
@@ -201,6 +244,13 @@ def main(
             num_correct += radgpt.utils.score(ypreds, gt)
         acc = 100.0 * num_correct / len(cached_results.keys())
         click.secho(f"Accuracy: {acc:.6f}", bold=True)
+
+        if by_panel:
+            return
+        img_stats = compute_imaging_results_from_topic_eval(cached_results, ac)
+        click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
+        click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
+        click.secho(f"False Negative Rate: {img_stats['fnr']:.6f}", bold=True)
         return
 
     # Load the specified dataset of patient one-liners.
@@ -414,6 +464,13 @@ def main(
     else:
         acc = 100.0 * count / len(all_results.keys())
         click.secho(f"Accuracy: {acc:.6f}", bold=True)
+
+        if by_panel:
+            return
+        img_stats = compute_imaging_results_from_topic_eval(all_results, ac)
+        click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
+        click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
+        click.secho(f"False Negative Rate: {img_stats['fnr']:.6f}", bold=True)
 
 
 if __name__ == "__main__":

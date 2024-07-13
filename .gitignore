@@ -116,7 +116,7 @@ results/
 
 # Datasets and models
 batch_queries.json
-*.csv
+jama_raw.csv
 *.csv.gz
 *.tar
 *.index
