@@ -8,6 +8,7 @@ Author(s):
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import pandas as pd
+from datasets import load_dataset
 from typing import Optional
 
 from .dataset import (
@@ -46,26 +47,20 @@ def load_case_labels(
     Returns:
         The ground-truth patient case labels.
     """
-    cols = ["case", "panel", "topic", "topic_id"]
-
     if fn_or_url:
-        return pd.read_csv(fn_or_url)[cols]
+        return pd.read_csv(fn_or_url)
 
-    dataset_to_gid = {
-        "synthetic": 1839683815,
-        "medbullets": 0,
-        "jama_cc": 226315523,
-        "mimic_iv": 42526063,
-        "nejm": 1217489264,
+    data_files = {
+        "synthetic": "synthetic.jsonl",
+        "medbullets": "usmle.jsonl",
+        "jama_cc": "jama.jsonl",
+        "nejm": "nejm.jsonl",
+        "mimic_iv": "bidmc.jsonl"
     }
-    labels_url: str = (
-        "https://docs.google.com/spreadsheets/d/"
-        "1PNu-rAbQG3SAAhQ7TZqOaS4cT7V8033dKVDguG4Llxs"
-        f"/export?gid={dataset_to_gid[dataset]}&format=csv"
-    )
+    ds = load_dataset("michaelsyao/RadCases", data_files=data_files)
 
-    labels = pd.read_csv(labels_url)[cols]
-    for c in cols:
+    labels = ds[dataset].to_pandas()
+    for c in labels.columns:
         if c == "case":
             continue
         labels = labels[labels[c].notnull()]

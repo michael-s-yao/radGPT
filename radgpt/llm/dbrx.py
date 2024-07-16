@@ -64,6 +64,13 @@ class DBRXInstruct(LLM):
         if hasattr(self, "system_prompt") and self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
         messages.append({"role": "user", "content": prompt})
+
+        if self.json_format:
+            messages.append({
+                "role": "assistant",
+                "content": "Here is the JSON requested:\n{"
+            })
+
         tokens = self.tokenizer.apply_chat_template(
             messages,
             tokenize=True,
@@ -90,6 +97,9 @@ class DBRXInstruct(LLM):
         output = next(iter(self.tokenizer.batch_decode(enc)))
         output = output.split("<|im_start|>assistant\n")[-1]
         output = output.split("<|im_end|>")[0]
+
+        if self.json_format:
+            output = "{" + output[:(output.rfind("}") + 1)]
 
         try:
             output = json.loads(output)["answer"]

@@ -11,7 +11,7 @@ import json
 import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from mistral_common.protocol.instruct.messages import (
-    UserMessage, SystemMessage
+    AssistantMessage, SystemMessage, UserMessage
 )
 from mistral_common.protocol.instruct.request import ChatCompletionRequest
 from transformers import AutoModelForCausalLM
@@ -65,6 +65,12 @@ class Mistral8x7BInstruct(LLM):
         if hasattr(self, "system_prompt") and self.system_prompt:
             messages.append(SystemMessage(content=self.system_prompt))
         messages.append(UserMessage(content=prompt))
+
+        if self.json_format:
+            messages.append(
+                AssistantMessage(content="Here is the JSON requested:\n{")
+            )
+
         request = ChatCompletionRequest(messages=messages)
         tokens = self.tokenizer.encode_chat_completion(request).tokens
         eos_token_id = self.tokenizer.instruct_tokenizer.tokenizer.eos_id
@@ -83,6 +89,10 @@ class Mistral8x7BInstruct(LLM):
                 )
         output = self.tokenizer.decode(enc[0].tolist())
         output = output.split(" [/INST] ", 1)[-1].split("}", 1)[0] + "}"
+
+        if self.json_format:
+            output = "{" + output[:(output.rfind("}") + 1)]
+
         try:
             output = json.loads(output)["answer"]
             if isinstance(output, list):

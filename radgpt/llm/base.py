@@ -43,6 +43,8 @@ class LLM(abc.ABC):
 
     max_new_tokens: int = 128
 
+    json_format: bool = False
+
     def __init__(self, seed: int = 42, **kwargs):
         self.seed = seed
         seed_everything(self.seed)

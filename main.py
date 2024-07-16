@@ -273,6 +273,8 @@ def main(
         system_prompt = system_prompt.format(
             ac.panels if by_panel else ac.topics
         )
+        llm.json_format = True
+        llm.max_new_tokens = 512
     else:
         system_prompt = system_prompt.format(
             ac.panels if by_panel else ac.topics,

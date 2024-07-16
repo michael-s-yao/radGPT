@@ -61,6 +61,13 @@ class Llama3Instruct(LLM):
         if hasattr(self, "system_prompt") and self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
         messages.append({"role": "user", "content": prompt})
+
+        if self.json_format:
+            messages.append({
+                "role": "assistant",
+                "content": "Here is the JSON requested:\n{"
+            })
+
         with torch.inference_mode():
             with self.autocast_context:
                 try:
@@ -78,6 +85,12 @@ class Llama3Instruct(LLM):
                 except RuntimeError as e:
                     return [str(e)]
         output = output[0]["generated_text"][-1]["content"]
+
+        if self.json_format:
+            output = output[:(output.rfind("}") + 1)]
+            if not output.startswith("{"):
+                output = "{" + output
+
         try:
             output = json.loads(output)["answer"]
             if isinstance(output, list):

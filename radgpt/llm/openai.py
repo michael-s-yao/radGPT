@@ -28,6 +28,7 @@ class GPT4Turbo(LLM):
         """
         super(GPT4Turbo, self).__init__(seed=seed, **kwargs)
 
+        self.json_format = True
         self.client = OpenAI()
 
     @backoff.on_exception(backoff.expo, RateLimitError)

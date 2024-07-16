@@ -56,7 +56,6 @@ import os
 import pandas as pd
 import random
 import re
-from datasets import load_dataset
 from pathlib import Path
 from typing import Sequence, Union
 
@@ -88,16 +87,12 @@ def hashme(string: str) -> str:
 
 
 def read_synthetic_dataset(
-    dataset_url: str = (
-        "https://docs.google.com/spreadsheets/d/"
-        "1PNu-rAbQG3SAAhQ7TZqOaS4cT7V8033dKVDguG4Llxs/"
-        "export?gid=1839683815&format=csv"
-    )
+    dataset_url: str = os.path.join(os.path.dirname(__file__), "synthetic.csv")
 ) -> np.ndarray:
     """
     Returns the synthetic LLM-generated dataset of patient one-liners.
     Input:
-        dataset_url: The URL to the dataset.
+        dataset_url: The URL or relative path to the dataset.
     Returns:
         An array of all the patient one-liners in the synthetic dataset.
     """

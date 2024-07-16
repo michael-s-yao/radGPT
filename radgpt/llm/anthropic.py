@@ -55,6 +55,11 @@ class ClaudeSonnet(LLM):
         if hasattr(self, "system_prompt") and self.system_prompt:
             system = self.system_prompt
         messages.append({"role": "user", "content": prompt})
+        if self.json_format:
+            messages.append({
+                "role": "assistant",
+                "content": "Here is the JSON requested:\n{"
+            })
         chat_completion = self.client.messages.create(
             system=system,
             messages=messages,
@@ -65,6 +70,8 @@ class ClaudeSonnet(LLM):
         )
 
         output = chat_completion.content[0].text
+        if self.json_format:
+            output = "{" + output[:(output.rfind("}") + 1)]
         try:
             output = json.loads(output)["answer"]
             if isinstance(output, list):
