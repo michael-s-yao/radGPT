@@ -1,30 +1,26 @@
 """
-MPNet- based retriever class implementations.
+OpenAI embedding  model-based retriever.
 
 Author(s):
     Michael Yao @michael-s-yao
     Allison Chae @allisonjchae
 
-Citation(s):
-    [1] Song K, Tan X, Qin T, Lu J. Li T. MPNet: Masked and permuted pre-
-        training for language understanding. arXiv Preprint. (2020). doi:
-        10.48550/arXiv.2004.09297
-
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import faiss
 import os
-import torch
-import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+import numpy as np
+from openai import OpenAI
 from pathlib import Path
 from typing import Optional, Sequence, Tuple, Union
 
 from .base import Corpus, Document, Retriever
 
 
-class MPNetRetriever(Retriever):
-    model_name: str = "sentence-transformers/all-mpnet-base-v2"
+class OpenAIRetriever(Retriever):
+    model_name: str = "text-embedding-3-large"
+
+    hidden_size: int = 3072
 
     def __init__(
         self,
@@ -39,21 +35,17 @@ class MPNetRetriever(Retriever):
             corpus: a corpus of documents to retrieve from.
             index_dir: the cache path to load and save the index from.
         """
-        super(MPNetRetriever, self).__init__(
+        super(OpenAIRetriever, self).__init__(
             corpus=corpus, index_dir=index_dir, **kwargs
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModel.from_pretrained(self.model_name)
-        *_, last = self.model.parameters()
-        hidden_size = last.size(dim=-1)
+        self.client = OpenAI()
 
         if os.path.isfile(self.index_fn):
             self.index = faiss.read_index(self.index_fn)
             return
-        self.index = faiss.IndexFlatIP(hidden_size)
-        embeddings = map(lambda doc: self.embed(doc.text), self.corpus)
-        for vec in embeddings:
-            self.index.add(vec.detach().cpu().numpy())
+        self.index = faiss.IndexFlatIP(self.hidden_size)
+        for vec in [self.embed(doc.text) for doc in self.corpus]:
+            self.index.add(vec[np.newaxis])
         faiss.write_index(self.index, self.index_fn)
 
     def retrieve(
@@ -68,7 +60,7 @@ class MPNetRetriever(Retriever):
         Retrieve:
             The top k documents relevant to the query.
         """
-        embedding = self.embed(query).detach().cpu().numpy()
+        embedding = self.embed(query)[np.newaxis]
         results = self.index.search(embedding, k=k)
         scores, idxs = self.index.search(embedding, k=k)
         results = [self.corpus[idx] for idx in idxs[0]]
@@ -76,22 +68,17 @@ class MPNetRetriever(Retriever):
             return results, scores[0]
         return results
 
-    @torch.no_grad()
-    def embed(self, query: str) -> torch.Tensor:
+    def embed(self, query: str) -> np.ndarray:
         """
-        Embeds the query using the MPNet model.
+        Embeds the query using the OpenAI embedding model.
         Input:
-            query: an input query.
+            query: an input query to embed.
         Returns:
-            The embedding of the query using the MPNet model.
+            The embedding of the query using the embedding model.
         """
-        tokens = self.tokenizer(query, return_tensors="pt", truncation=True)
-        output = self.model(**tokens)
-        mask = tokens["attention_mask"].unsqueeze(dim=-1).expand(
-            output[0].size()
+        embedding = self.client.embeddings.create(
+            input=query,
+            model=self.model_name,
+            dimensions=self.hidden_size
         )
-        mask = mask.float()
-        embedding = torch.sum(output[0] * mask, dim=1) / torch.clamp(
-            mask.sum(dim=1), min=torch.finfo(torch.float32).eps
-        )
-        return F.normalize(embedding, p=2, dim=1)
+        return np.array(embedding.data[0].embedding)

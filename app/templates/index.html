@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>LLMs for Imaging Study Ordering</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/css/global.css') }}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap" />
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon" />
+    <script src="https://use.fontawesome.com/cefbebdc70.js"></script>
+  </head>
+
+  <body>
+    <main>
+      <div>
+        <button class="submit" id="submit">Submit My Answers</button>
+        {% for q in questions %}
+          <div id="Q{{ loop.index }}-box" class="question">
+            <label>Case {{ loop.index }} / {{ questions | length }}</label>
+            <h3>{{ q }}</h3>
+            <p>What imaging study would you order for this patient? If no imaging is indicated, please select "None".</p>
+            <input name="Q{{ loop.index }}" id="Q{{ loop.index }}" autocomplete="off", placeholder="Your Answer Here" list="" />
+          </div>
+        {% endfor %}
+
+        <datalist id="imaging_studies" role="listbox">
+          {% for imaging_study in options %}
+	    <option value="{{ imaging_study }}">{{ imaging_study }}</option>
+          {% endfor %}
+        </datalist>
+
+        <button class="nav" id="back"><i class="fa fa-angle-left"></i>&emsp;Previous Case</button>
+        <button class="nav" id="next">Next Case&emsp;<i class="fa fa-angle-right"></i></button>
+
+	<div id="success">
+          <p>Thank you for completing this task. Please email the attached radGPT-answers.jsonl file to michael.yao@pennmedicine.upenn.edu</p>
+        </div>
+      </div>
+      <div>
+        <p>ACR Appropriateness Criteria</p>
+	<footer>&copy;2024 <a href="https://trustml.github.io/" target="_blank">trustML@Penn</a>. All rights reserved.</footer>
+      </div>
+    </main>
+    <script src="{{ url_for('static', filename='styles/js/qa.js') }}"></script>
+  </body>
+</html>

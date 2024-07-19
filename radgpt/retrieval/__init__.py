@@ -17,6 +17,8 @@ from .bm25 import BM25Retriever
 from .bert import BERTRetriever, RadBERTRetriever
 from .mpnet import MPNetRetriever
 from .medcpt import MedCPTRetriever
+from .cohere import CohereRetriever
+from .openai import OpenAIRetriever
 
 
 __all__ = [
@@ -24,6 +26,8 @@ __all__ = [
     "Document",
     "Retriever",
     "BM25Retriever",
+    "CohereRetriever",
+    "OpenAIRetriever",
     "MedCPTRetriever",
     "MPNetRetriever",
     "BERTRetriever",

@@ -1,30 +1,29 @@
 """
-MPNet- based retriever class implementations.
+Cohere English embedding model-based retriever.
 
 Author(s):
     Michael Yao @michael-s-yao
     Allison Chae @allisonjchae
 
-Citation(s):
-    [1] Song K, Tan X, Qin T, Lu J. Li T. MPNet: Masked and permuted pre-
-        training for language understanding. arXiv Preprint. (2020). doi:
-        10.48550/arXiv.2004.09297
-
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
+import cohere_aws
 import faiss
+import numpy as np
 import os
-import torch
-import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+from configparser import RawConfigParser
 from pathlib import Path
 from typing import Optional, Sequence, Tuple, Union
 
 from .base import Corpus, Document, Retriever
 
 
-class MPNetRetriever(Retriever):
-    model_name: str = "sentence-transformers/all-mpnet-base-v2"
+class CohereRetriever(Retriever):
+    model_name: str = "cohere.embed-english-v3"
+
+    hidden_size: int = 1024
+
+    batch_size: int = 16
 
     def __init__(
         self,
@@ -32,28 +31,35 @@ class MPNetRetriever(Retriever):
         index_dir: Optional[Union[Path, str]] = os.path.join(
             os.path.dirname(__file__), "indices"
         ),
+        credentials_fn: Union[Path, str] = os.path.expanduser(
+            "~/.aws/credentials"
+        ),
+        profile: str = "default",
         **kwargs
     ):
         """
         Args:
             corpus: a corpus of documents to retrieve from.
             index_dir: the cache path to load and save the index from.
+            credentials_fn: the filename to the AWS credentials.
+            profile: the credentials profile to use. Default `default`.
         """
-        super(MPNetRetriever, self).__init__(
+        super(CohereRetriever, self).__init__(
             corpus=corpus, index_dir=index_dir, **kwargs
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModel.from_pretrained(self.model_name)
-        *_, last = self.model.parameters()
-        hidden_size = last.size(dim=-1)
+        config = RawConfigParser()
+        config.read(credentials_fn)
+        self.client = cohere_aws.Client(
+            mode=cohere_aws.Mode.BEDROCK, region_name="us-east-1"
+        )
 
         if os.path.isfile(self.index_fn):
             self.index = faiss.read_index(self.index_fn)
             return
-        self.index = faiss.IndexFlatIP(hidden_size)
-        embeddings = map(lambda doc: self.embed(doc.text), self.corpus)
+        self.index = faiss.IndexFlatIP(self.hidden_size)
+        embeddings = self.embed([doc.text for doc in self.corpus])
         for vec in embeddings:
-            self.index.add(vec.detach().cpu().numpy())
+            self.index.add(vec[np.newaxis])
         faiss.write_index(self.index, self.index_fn)
 
     def retrieve(
@@ -68,7 +74,7 @@ class MPNetRetriever(Retriever):
         Retrieve:
             The top k documents relevant to the query.
         """
-        embedding = self.embed(query).detach().cpu().numpy()
+        embedding = self.embed(query)
         results = self.index.search(embedding, k=k)
         scores, idxs = self.index.search(embedding, k=k)
         results = [self.corpus[idx] for idx in idxs[0]]
@@ -76,22 +82,22 @@ class MPNetRetriever(Retriever):
             return results, scores[0]
         return results
 
-    @torch.no_grad()
-    def embed(self, query: str) -> torch.Tensor:
+    def embed(self, query: Union[str, Sequence[str]]) -> np.ndarray:
         """
-        Embeds the query using the MPNet model.
+        Embeds the query using the Cohere embedding model.
         Input:
-            query: an input query.
+            query: an input query or list of queries.
         Returns:
-            The embedding of the query using the MPNet model.
+            The embedding of the query using the embedding model.
         """
-        tokens = self.tokenizer(query, return_tensors="pt", truncation=True)
-        output = self.model(**tokens)
-        mask = tokens["attention_mask"].unsqueeze(dim=-1).expand(
-            output[0].size()
-        )
-        mask = mask.float()
-        embedding = torch.sum(output[0] * mask, dim=1) / torch.clamp(
-            mask.sum(dim=1), min=torch.finfo(torch.float32).eps
-        )
-        return F.normalize(embedding, p=2, dim=1)
+        query = [query] if isinstance(query, str) else query
+
+        embeddings = []
+        for i in range(0, len(query), self.batch_size):
+            embed = self.client.embed(
+                texts=query[i:min(i + self.batch_size, len(query))],
+                model_id=self.model_name,
+                input_type="search_document",
+            )
+            embeddings.append(np.array(embed.embeddings))
+        return np.vstack(embeddings)

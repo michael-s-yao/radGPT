@@ -224,7 +224,9 @@ def main(
     _key = "panel" if by_panel else "topic"
     run_id = f"{dataset}_{llm}_{method}_{_key}_{seed}"
     if method.lower() == "rag":
-        run_id += f"_{rag_retriever}_{rag_corpus}_{rag_top_k}"
+        run_id += (
+            f"_{rag_retriever}_{rag_corpus.replace('/', '_')}_{rag_top_k}"
+        )
     elif method.lower() == "cot":
         run_id += f"_{cot_reasoning_method}"
     elif method.lower() == "icl":
@@ -447,7 +449,7 @@ def main(
                         failure.update()
                     all_results[idx] = {"ypred": ypreds, "ygt": gt}
 
-                    if savepath is not None:
+                    if savepath is not None and not fast_dev_run:
                         with open(savepath, "w") as f:
                             json.dump(all_results, f, indent=2)
 
