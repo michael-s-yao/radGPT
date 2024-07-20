@@ -80,7 +80,9 @@ def score(preds: Sequence[str], gts: Sequence[str]) -> bool:
         Whether at least one ground-truth label is in the list of predictions.
     """
     return any([
-        y.lower().replace(" ", "")[:-1] in ypred.lower().replace(" ", "")
+        "".join(filter(str.isalpha, y.lower()))[:-1] in "".join(
+            filter(str.isalpha, ypred.lower())
+        )
         for ypred in preds for y in gts
     ])
 

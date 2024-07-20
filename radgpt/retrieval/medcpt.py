@@ -26,6 +26,8 @@ from .base import Corpus, Document, Retriever
 class MedCPTRetriever(Retriever):
     model_name: str = "ncbi/MedCPT-Query-Encoder"
 
+    max_tokens: int = 512
+
     def __init__(
         self,
         corpus: Corpus,
@@ -79,12 +81,16 @@ class MedCPTRetriever(Retriever):
     @torch.no_grad()
     def embed(self, query: str) -> torch.Tensor:
         """
-        Embeds the query using the BERT model.
+        Embeds the query using the MedCPT model.
         Input:
             query: an input query.
         Returns:
-            The embedding of the query using the BERT model.
+            The embedding of the query using the MedCPT model.
         """
-        embedding = self.model(**self.tokenizer(query, return_tensors="pt"))
+        kwargs = {
+            key: val[:, :min(self.max_tokens, val.size(dim=-1))]
+            for key, val in self.tokenizer(query, return_tensors="pt").items()
+        }
+        embedding = self.model(**kwargs)
         out = embedding.last_hidden_state[:, 0, :]
         return out / torch.linalg.norm(out, dim=-1)

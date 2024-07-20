@@ -28,11 +28,13 @@ function linkDatalist(question) {
       input.value = option.value;
       studies.style.display = "none";
       input.style.borderRadius = "8px";
+      input.style.borderColor = null;
     }
   };
 
   input.oninput = function() {
     currentFocus = -1;
+    input.style.borderColor = null;
     var text = input.value.toUpperCase();
     for (let option of studies.options) {
       if (option.value.toUpperCase().indexOf(text) > -1)
@@ -68,6 +70,7 @@ function unlinkDatalist() {
       input.oninput = null;
       input.onkeydown = null;
       input.onkeyup = null;
+      input.style.borderColor = null;
     });
 };
 
@@ -111,6 +114,8 @@ function resetView() {
   [...document.querySelectorAll("button.nav")]
     .map((x) => x.style.display = null);
   unlinkDatalist();
+  [...document.querySelectorAll("details")]
+    .map((x) => x.style.display = "none");
 }
 
 function setView(idx) {
@@ -119,30 +124,14 @@ function setView(idx) {
     .find((x) => x.id === "Q" + idx.toString() + "-box");
   NonNull(view).classList.add("active");
   linkDatalist(NonNull(view));
+  const re = new RegExp(String.raw`guidelines-Q${idx}-T\d`, "g");
+  let recs = [...document.querySelectorAll("details")]
+    .filter((x) => x.id.match(re))
+    .map((x) => x.style.display = null);
   if (idx === 1)
     document.querySelector("button#back").style.display = "none";
   if (idx === numQuestions)
     document.querySelector("button#next").style.display = "none";
-}
-
-function submit() {
-  if (!confirm("I confirm that I have completed this task to the best of my ability."))
-    return;
-  resetView();
-  const answers = [...document.querySelectorAll(".question")]
-    .map(function (x) {
-      y = new Object();
-      y.question = NonNull(parseInt(x.id.replace(/[^0-9]/g, "")));
-      y.answer = NonNull(x.querySelector("input")).value;
-      return y;
-    });
-  document.getElementById("submit").style.display = "none";
-  document.getElementById("success").style.display = "block";
-  fetch("/submit", {
-    method: "POST",
-    body: JSON.stringify(answers),
-    headers: {"Content-type": "application/json; charset=UTF-8"}
-  });
 }
 
 var activeView = 1;
@@ -152,4 +141,6 @@ setView(activeView);
 [...document.querySelectorAll("button.nav")]
   .map((x) => x.addEventListener("click", validateInput));
 document.addEventListener("click", checkIfFinished);
-document.getElementById("submit").onclick = submit;
+document.getElementById("submit").onclick = function() {
+  return confirm("I confirm that I have completed this task to the best of my ability.");
+};

@@ -25,6 +25,8 @@ from .base import Corpus, Document, Retriever
 class BERTRetriever(Retriever):
     model_name: str = "FacebookAI/roberta-base"
 
+    max_tokens: int = 512
+
     def __init__(
         self,
         corpus: Corpus,
@@ -83,7 +85,11 @@ class BERTRetriever(Retriever):
         Returns:
             The embedding of the query using the BERT model.
         """
-        embedding = self.model(**self.tokenizer(query, return_tensors="pt"))
+        kwargs = {
+            key: val[:, :min(self.max_tokens, val.size(dim=-1))]
+            for key, val in self.tokenizer(query, return_tensors="pt").items()
+        }
+        embedding = self.model(**kwargs)
         out = embedding.pooler_output
         return out / torch.linalg.norm(out, dim=-1)
 

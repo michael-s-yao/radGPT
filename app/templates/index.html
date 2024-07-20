@@ -16,15 +16,18 @@
   <body>
     <main>
       <div>
-        <button class="submit" id="submit">Submit My Answers</button>
-        {% for q in questions %}
-          <div id="Q{{ loop.index }}-box" class="question">
-            <label>Case {{ loop.index }} / {{ questions | length }}</label>
-            <h3>{{ q }}</h3>
-            <p>What imaging study would you order for this patient? If no imaging is indicated, please select "None".</p>
-            <input name="Q{{ loop.index }}" id="Q{{ loop.index }}" autocomplete="off", placeholder="Your Answer Here" list="" />
-          </div>
-        {% endfor %}
+	<form action="/api/v1/submit" method="POST">
+          <input type="submit" class="submit" id="submit" value="Submit My Answers" />
+	  <input type="text" name="uid" id="uid" value="{{ uid }}" style="display:none !important" tabindex="-1" autocomplete="off" />
+          {% for q in questions %}
+            <div id="Q{{ loop.index }}-box" class="question">
+              <label>Case {{ loop.index }} / {{ questions | length }}</label>
+              <h3>{{ q }}</h3>
+              <p>What imaging study would you order for this patient? If no imaging is indicated, select "None".</p>
+              <input type="text" name="Q{{ loop.index }}" id="Q{{ loop.index }}" autocomplete="off", placeholder="Your Answer Here" list="" />
+            </div>
+          {% endfor %}
+	</form>
 
         <datalist id="imaging_studies" role="listbox">
           {% for imaging_study in options %}
@@ -34,13 +37,38 @@
 
         <button class="nav" id="back"><i class="fa fa-angle-left"></i>&emsp;Previous Case</button>
         <button class="nav" id="next">Next Case&emsp;<i class="fa fa-angle-right"></i></button>
-
-	<div id="success">
-          <p>Thank you for completing this task. Please email the attached radGPT-answers.jsonl file to michael.yao@pennmedicine.upenn.edu</p>
-        </div>
       </div>
       <div>
-        <p>ACR Appropriateness Criteria</p>
+        <p class="acr-title"><a href="https://www.acr.org/Clinical-Resources/ACR-Appropriateness-Criteria" target="_blank">ACR Appropriateness Criteria</a></p>
+	<label class="acr-info"><i class="fa fa-info-circle" style="padding: 0 5px 0 0;margin: 0;"></i> A large language model (LLM) has identified the following 3 ACR Appropriateness Criteria topics that may describe the patient's presentation. The topics are listed from <em>most</em> to <em>least</em> relevant according to the LLM. Click on a topic to see the evidence-based imaging recommendations from the ACR for each of the topics.</label>
+	<label class="llm-legend-title">Legend</label>
+	<ul class="llm-legend">
+          <li><span class="green"></span> Usually appropriate</li>
+          <li><span class="yellow"></span> May be appropriate</li>
+          <li><span class="red"></span> Usually not appropriate</li>
+          <li><span class="gray"></span> Disputed/Insufficient Evidence</li>
+	</ul>
+
+	{% for rec in guidelines %}
+	  {% set outer_loop = loop %}
+	  {% for data in rec %}
+  	    <details id="guidelines-Q{{ outer_loop.index }}-T{{ loop.index }}">
+              <summary>{{ data["Topic"] }}</summary>
+              <table>
+                <tr>
+                  <th>Imaging Study</th>
+                  <th>Radiation</th>
+                </tr>
+                {% for row in data["Table"] %}
+                  <tr class="{{ row['Category'] }}">
+                    <td>{{ row["Procedure"] }}</td>
+                    <td>{{ row["Radiation"] }}</td>
+                  </tr>
+	        {% endfor %}
+	      </table>
+	    </details>
+	  {% endfor %}
+	{% endfor %}
 	<footer>&copy;2024 <a href="https://trustml.github.io/" target="_blank">trustML@Penn</a>. All rights reserved.</footer>
       </div>
     </main>

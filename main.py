@@ -23,7 +23,6 @@ import radgpt
 DATASETS_TO_PRETTY_NAMES: Dict[str, str] = {
     "synthetic": "Synthetic",
     "medbullets": "Medbullets USMLE",
-    "medqa": "MedQA USMLE",
     "jama_cc": "JAMA Clinical Challenges",
     "nejm": "NEJM Case Records",
     "mimic_iv": "BIDMC"

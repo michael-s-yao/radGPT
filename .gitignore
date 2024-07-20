@@ -122,3 +122,4 @@ jama_raw.csv
 *.index
 evidence/
 *.jsonl
+cases.txt
