@@ -23,6 +23,13 @@ USER_PROMPT_BASE: str = (
 )
 
 
+# Baseline user prompt without any engineering.
+USER_PROMPT_BASE_STUDY: str = (
+    "Patient Case: {case}\n\n"
+    "Which imaging study (if any) is most appropriate for this patient?"
+)
+
+
 # User prompt for retrieval-augmented generation (RAG).
 USER_PROMPT_RAG: str = (
     "Here is some context for you to consider:\n{context}\n\n"
@@ -79,7 +86,8 @@ def get_top_k_panels(
     uid: Optional[str] = None,
     batch_if_available: bool = True,
     rag_context: Optional[Sequence[Document]] = None,
-    icl_context: Optional[Sequence[str]] = None
+    icl_context: Optional[Sequence[str]] = None,
+    **kwargs
 ) -> Union[Sequence[str], Dict[str, Any]]:
     """
     Returns the top k predictions for an input patient case.
@@ -97,7 +105,10 @@ def get_top_k_panels(
         The top k predictions from the LLM, or a batch request if applicable.
     """
     if method.lower() == "prompting":
-        prompt = USER_PROMPT_BASE.format(case=case)
+        if kwargs.get("study", False):
+            prompt = USER_PROMPT_BASE_STUDY.format(case=case)
+        else:
+            prompt = USER_PROMPT_BASE.format(case=case)
     elif method.lower() == "rag":
         prompt = USER_PROMPT_RAG.format(
             case=case, context=("\n".join([doc.text for doc in rag_context]))

@@ -128,6 +128,7 @@ def compute_imaging_results_from_topic_eval(
     help="The corpus to use for the retriever if the query method is RAG."
 )
 @click.option(
+    "--rag.top-k",
     "--rag.top_k",
     "rag_top_k",
     type=int,
@@ -145,6 +146,7 @@ def compute_imaging_results_from_topic_eval(
     help="Reasoning method for chain-of-thought prompting."
 )
 @click.option(
+    "--icl.num-examples",
     "--icl.num_examples",
     "icl_num_examples",
     type=int,
@@ -169,10 +171,27 @@ def compute_imaging_results_from_topic_eval(
     help="Random seed."
 )
 @click.option(
-    "--by-panel/--by-topic",
+    "--by-panel",
+    "eval_method",
+    type=str,
+    flag_value="panel",
+    help="Whether to evaluate the LLM by ACR AC Panels."
+)
+@click.option(
+    "--by-topic",
+    "eval_method",
+    type=str,
+    flag_value="topic",
     default=True,
     show_default=True,
-    help="Whether to evaluate the LLM by ACR AC panel or topic."
+    help="Whether to evaluate the LLM by ACR AC Topics."
+)
+@click.option(
+    "--by-study",
+    "eval_method",
+    type=str,
+    flag_value="study",
+    help="Whether to evaluate the LLM by imaging studies."
 )
 @click.option(
     "--savedir",
@@ -205,7 +224,7 @@ def main(
     icl_num_examples: Optional[int] = 1,
     icl_retriever: Optional[str] = None,
     seed: int = 42,
-    by_panel: bool = True,
+    eval_method: str = "topic",
     savedir: Optional[Union[Path, str]] = None,
     fast_dev_run: bool = False,
     verbose: bool = True,
@@ -220,8 +239,7 @@ def main(
 
     ac = radgpt.AppropriatenessCriteria()
     savepath = None
-    _key = "panel" if by_panel else "topic"
-    run_id = f"{dataset}_{llm}_{method}_{_key}_{seed}"
+    run_id = f"{dataset}_{llm}_{method}_{eval_method}_{seed}"
     if method.lower() == "rag":
         run_id += (
             f"_{rag_retriever}_{rag_corpus.replace('/', '_')}_{rag_top_k}"
@@ -246,7 +264,7 @@ def main(
         acc = 100.0 * num_correct / len(cached_results.keys())
         click.secho(f"Accuracy: {acc:.6f}", bold=True)
 
-        if by_panel:
+        if eval_method != "topic":
             return
         img_stats = compute_imaging_results_from_topic_eval(cached_results, ac)
         click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
@@ -268,18 +286,28 @@ def main(
         llm_init_kwargs["repetition_penalty"] = 1.5
     llm, llm_name = getattr(radgpt.llm, llm)(**llm_init_kwargs), llm
     system_prompt = radgpt.llm.get_system_prompt(
-        method, rationale=cot_reasoning_method
+        method, rationale=cot_reasoning_method, study=(eval_method == "study")
     )
     if method.lower() == "cot":
         system_prompt = system_prompt.format(
-            ac.panels if by_panel else ac.topics
+            ac.panels
+            if eval_method == "panel"
+            else (ac.topics if eval_method == "topic" else ac.studies)
         )
         llm.json_format = True
         llm.max_new_tokens = 512
     else:
         system_prompt = system_prompt.format(
-            ac.panels if by_panel else ac.topics,
-            "Thoracic" if by_panel else "Lung Cancer Screening"
+            ac.panels
+            if eval_method == "panel"
+            else (ac.topics if eval_method == "topic" else ac.studies),
+            "Thoracic"
+            if eval_method == "panel"
+            else (
+                "Lung Cancer Screening"
+                if eval_method == "topic"
+                else "CT chest without IV contrast screening"
+            )
         )
     llm.set_system_prompt(system_prompt)
 
@@ -342,7 +370,7 @@ def main(
                 rag_corpus=rag_corpus
             ),
             eval_method=(
-                f"ACR AC {'Panel' if by_panel else 'Topic'} Evaluation"
+                f"ACR AC {eval_method.title()} Evaluation"
             ),
             autorefresh=True,
             min_delta=0.5
@@ -382,7 +410,7 @@ def main(
 
             for idx, case in enumerate(patient_cases):
                 gt = y_gt[y_gt["case"] == radgpt.data.hashme(str(case))][
-                    "panel" if by_panel else "topic"
+                    "panel" if eval_method == "panel" else "topic"
                 ]
                 gt = re.split(r",(?=\S)", gt.item())
                 if downloaded_results is not None:
@@ -404,9 +432,10 @@ def main(
                                     str(ref_case)
                                 )
                             ]
-                            ref_gt = (
-                                ref_gt["panel" if by_panel else "topic"].item()
-                            )
+                            ref_gt = ref_gt[
+                                "panel" if eval_method == "panel" else "topic"
+                            ]
+                            ref_gt = ref_gt.item()
                             icl_labels.append(
                                 json.dumps({
                                     "answer": re.split(r",(?=\S)", ref_gt)
@@ -426,7 +455,8 @@ def main(
                         method=method,
                         uid=f"{run_id}_{idx}",
                         rag_context=rag_context,
-                        icl_context=icl_context
+                        icl_context=icl_context,
+                        study=(eval_method == "study")
                     )
                     if method.lower() == "cot" and (
                         cot_reasoning_method.lower() == "bayesian"
@@ -440,6 +470,11 @@ def main(
                     error.update()
                     continue
                 else:
+                    if eval_method == "study":
+                        gt = sum(
+                            [ac.map_topic_to_imaging_study(yy) for yy in gt],
+                            []
+                        )
                     case_correct = radgpt.utils.score(ypreds, gt)
                     count += case_correct
                     if case_correct:
@@ -468,7 +503,7 @@ def main(
         acc = 100.0 * count / len(all_results.keys())
         click.secho(f"Accuracy: {acc:.6f}", bold=True)
 
-        if by_panel:
+        if eval_method != "topic":
             return
         img_stats = compute_imaging_results_from_topic_eval(all_results, ac)
         click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)

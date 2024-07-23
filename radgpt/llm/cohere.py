@@ -1,5 +1,5 @@
 """
-Databricks DBRX Instruct LLM model.
+Cohere C4AI Command R LLM model.
 
 Author(s):
     Michael Yao @michael-s-yao
@@ -16,19 +16,15 @@ from ..utils import import_flash_attn
 from .base import LLM
 
 
-class DBRXInstruct(LLM):
-    hf_repo_name: str = "databricks/dbrx-instruct"
-
-    token: bool = True
-
-    trust_remote_code: bool = True
+class CommandRPlus(LLM):
+    hf_repo_name: str = "CohereForAI/c4ai-command-r-plus-4bit"
 
     def __init__(self, seed: int = 42, **kwargs):
         """
         Args:
             seed: random seed. Default 42.
         """
-        super(DBRXInstruct, self).__init__(seed=seed, **kwargs)
+        super(CommandRPlus, self).__init__(seed=seed, **kwargs)
 
         self.dtype = torch.float16
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -38,20 +34,16 @@ class DBRXInstruct(LLM):
         self.attn_implementation = attn_and_autocast["attn_implementation"]
         self.autocast_context = attn_and_autocast["autocast_context"]
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.hf_repo_name,
-            trust_remote_code=self.trust_remote_code,
-            token=self.token
-        )
-
+        self.tokenizer = AutoTokenizer.from_pretrained(self.hf_repo_name)
         self.model = AutoModelForCausalLM.from_pretrained(
             self.hf_repo_name,
-            trust_remote_code=self.trust_remote_code,
-            token=self.token,
             attn_implementation=self.attn_implementation,
             torch_dtype=self.dtype,
             device_map="auto",
         )
+        self.start_of_turn = "<|START_OF_TURN_TOKEN|>"
+        self.end_of_turn = "<|END_OF_TURN_TOKEN|>"
+        self.chatbot = "<|CHATBOT_TOKEN|>"
 
     def query(self, prompt: str) -> Sequence[str]:
         """
@@ -64,13 +56,11 @@ class DBRXInstruct(LLM):
         if hasattr(self, "system_prompt") and self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
         messages.append({"role": "user", "content": prompt})
-
         if self.json_format:
             messages.append({
                 "role": "assistant",
                 "content": "Here is the JSON requested:\n{"
             })
-
         tokens = self.tokenizer.apply_chat_template(
             messages,
             tokenize=True,
@@ -78,6 +68,7 @@ class DBRXInstruct(LLM):
             return_tensors="pt"
         )
         tokens = tokens.to(self.model.device)
+
         with torch.inference_mode():
             with self.autocast_context:
                 try:
@@ -96,12 +87,15 @@ class DBRXInstruct(LLM):
                     if "CUDA out of memory" in str(e):
                         raise e
                     return [str(e)]
-        output = next(iter(self.tokenizer.batch_decode(enc)))
-        output = output.split("<|im_start|>assistant\n")[-1]
-        output = output.split("<|im_end|>")[0]
+        output = self.tokenizer.decode(enc[0])
+        output = output.split(self.start_of_turn)[-1]
+        output = output.split(self.end_of_turn)[0]
+        output = output.split(self.chatbot)[-1]
 
         if self.json_format:
-            output = "{" + output[:(output.rfind("}") + 1)]
+            output = output[:(output.rfind("}") + 1)]
+            if not output.startswith("{"):
+                output = "{" + output
 
         try:
             output = json.loads(output)["answer"]

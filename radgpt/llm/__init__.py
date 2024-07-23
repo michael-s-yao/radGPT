@@ -17,10 +17,12 @@ from .dbrx import DBRXInstruct
 from .mistral import Mistral8x7BInstruct
 from .meta import Llama3Instruct
 from .openai import GPT4Turbo
+from .cohere import CommandRPlus
 
 
 __all__ = [
     "ClaudeSonnet",
+    "CommandRPlus",
     "DBRXInstruct",
     "GPT4Turbo",
     "Llama3Instruct",
@@ -67,6 +69,16 @@ DEFAULT_SYSTEM_PROMPT: str = (
     'key "answer"\n\nCategories: {0}\n\nExample: 49M with HTN, IDDM, HLD, and '
     "20 pack-year smoking hx p/w 4 mo hx SOB and non-productive cough.\n"
     'Answer: {{"answer": "{1}"}}'
+)
+
+
+IMAGING_SYSTEM_PROMPT: str = (
+    "You are a clinical decision support tool that determines the best "
+    "imaging studies to order for patients. Choose the best imaging study "
+    'the following options. If no imaging is required, return "None". Provide '
+    'your output in JSON format with the single key "answer"\n\nCategories: '
+    "{0}\n\nExample: 49M with HTN, IDDM, HLD, and 20 pack-year smoking hx p/w "
+    '4 mo hx SOB and non-productive cough.\nAnswer: {{"answer": "{1}"}}'
 )
 
 
@@ -153,6 +165,8 @@ def get_system_prompt(method: str, **kwargs) -> str:
         The corresponding system prompt.
     """
     if method.lower() in ["prompting", "icl"]:
+        if kwargs.get("study", False):
+            return IMAGING_SYSTEM_PROMPT
         return DEFAULT_SYSTEM_PROMPT
     elif method.lower() == "rag":
         return RAG_SYSTEM_PROMPT

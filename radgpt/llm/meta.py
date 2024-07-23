@@ -83,6 +83,8 @@ class Llama3Instruct(LLM):
                         pad_token_id=self.pipeline.tokenizer.eos_token_id,
                     )
                 except RuntimeError as e:
+                    if "CUDA out of memory" in str(e):
+                        raise e
                     return [str(e)]
         output = output[0]["generated_text"][-1]["content"]
 
