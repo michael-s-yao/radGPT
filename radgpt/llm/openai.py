@@ -10,10 +10,13 @@ Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 import backoff
 import json
 import jsonlines
+import os
 import tempfile
 from openai import OpenAI, RateLimitError
 from openai.types.batch import Batch
-from typing import Any, Dict, Sequence
+from openai.types.fine_tuning import FineTuningJob
+from pathlib import Path
+from typing import Any, Dict, Sequence, Union
 
 from .base import LLM
 
@@ -113,4 +116,43 @@ class GPT4Turbo(LLM):
             endpoint="/v1/chat/completions",
             completion_window="24h",
             metadata=kwargs
+        )
+
+    def submit_finetuning_job(
+        self,
+        training_file: Union[Path, str],
+        validation_file: Union[Path, str],
+    ) -> FineTuningJob:
+        """
+        Creates and submits a model finetuning job using the specified
+        training and validation datasets.
+        Input:
+            training_file: an OpenAI file ID or local path to a training
+                dataset file.
+            validation_file: an OpenAI file ID or local path to a
+                validation dataset file.
+        Returns:
+            The submitted fine-tuning job.
+        """
+        if os.path.isfile(training_file):
+            with open(training_file, "rb") as f:
+                training_file = self.client.files.create(
+                    file=f, purpose="fine-tune"
+                )
+        else:
+            training_file = self.client.files.retrieve(training_file)
+
+        if os.path.isfile(validation_file):
+            with open(validation_file, "rb") as f:
+                validation_file = self.client.files.create(
+                    file=f, purpose="fine-tune"
+                )
+        else:
+            validation_file = self.client.files.retrieve(validation_file)
+
+        return self.client.fine_tuning.jobs.create(
+            training_file=training_file.id,
+            validation_file=validation_file.id,
+            model=self.model_name,
+            seed=self.seed
         )

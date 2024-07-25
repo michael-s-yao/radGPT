@@ -53,13 +53,14 @@ def get_method_options() -> Sequence[str]:
     """
     Returns the implemented LLM prompting options. `prompting` is just
     standard prompting, `rag` is retrieval-augmented generation, `icl` is
-    in-context learning, and `cot` is chain-of-thought prompting.
+    in-context learning, `cot` is chain-of-thought prompting, and `ft` is
+    fine-tuning with baseline prompting.
     Input:
         None.
     Returns:
         A list of the implemented LLM prompting options.
     """
-    return ["prompting", "rag", "icl", "cot"]
+    return ["prompting", "rag", "icl", "cot", "ft"]
 
 
 DEFAULT_SYSTEM_PROMPT: str = (
@@ -164,7 +165,7 @@ def get_system_prompt(method: str, **kwargs) -> str:
     Returns:
         The corresponding system prompt.
     """
-    if method.lower() in ["prompting", "icl"]:
+    if method.lower() in ["prompting", "icl", "ft"]:
         if kwargs.get("study", False):
             return IMAGING_SYSTEM_PROMPT
         return DEFAULT_SYSTEM_PROMPT

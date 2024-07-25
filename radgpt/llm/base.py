@@ -104,7 +104,7 @@ def get_top_k_panels(
     Returns:
         The top k predictions from the LLM, or a batch request if applicable.
     """
-    if method.lower() == "prompting":
+    if method.lower() in ["prompting", "ft"]:
         if kwargs.get("study", False):
             prompt = USER_PROMPT_BASE_STUDY.format(case=case)
         else:

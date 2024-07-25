@@ -11,6 +11,7 @@ Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 import click
 import enlighten
 import json
+import jsonlines
 import logging
 import os
 import re
@@ -38,7 +39,8 @@ METHODS_TO_PRETTY_NAMES: Dict[str, str] = {
         "Retrieval-Augmented Generation "
         "({rag_top_k} Documents from {rag_corpus} using {rag_retriever})"
     ),
-    "cot": "Chain-of-Thought Prompting ({cot_reasoning_method} Reasoning)"
+    "cot": "Chain-of-Thought Prompting ({cot_reasoning_method} Reasoning)",
+    "ft": "Fine-Tuned Baseline"
 }
 
 
@@ -63,7 +65,7 @@ def compute_imaging_results_from_topic_eval(
     nfp, nfn = 0, 0
     no_img_sts = ac.NO_IMAGING_INDICATION
     for _, cache_labels in topic_results.items():
-        ypreds, gt = cache_labels["ypred"], cache_labels["ygt"]
+        ypreds, gt = cache_labels["prediction"], cache_labels["ground_truth"]
         ypreds = list(
             filter(
                 lambda tt: any([bool(tt in yy) for yy in ypreds]),
@@ -132,7 +134,7 @@ def compute_imaging_results_from_topic_eval(
     "--rag.top_k",
     "rag_top_k",
     type=int,
-    default=16,
+    default=8,
     show_default=True,
     help="Number of documents to retrieve for RAG."
 )
@@ -150,7 +152,7 @@ def compute_imaging_results_from_topic_eval(
     "--icl.num_examples",
     "icl_num_examples",
     type=int,
-    default=1,
+    default=4,
     show_default=True,
     help="Number of examples to use for in-context learning."
 )
@@ -162,6 +164,13 @@ def compute_imaging_results_from_topic_eval(
     ),
     default=None,
     help="The retriever to use for finding in-context learning examples."
+)
+@click.option(
+    "--ft.model",
+    "ft_model",
+    type=str,
+    default=None,
+    help="The fine-tuned model ID or path to load for inference."
 )
 @click.option(
     "--seed",
@@ -219,10 +228,11 @@ def main(
     method: str,
     rag_retriever: Optional[str] = None,
     rag_corpus: Optional[str] = None,
-    rag_top_k: Optional[int] = 16,
+    rag_top_k: Optional[int] = 8,
     cot_reasoning_method: Optional[str] = None,
-    icl_num_examples: Optional[int] = 1,
+    icl_num_examples: Optional[int] = 4,
     icl_retriever: Optional[str] = None,
+    ft_model: Optional[Union[Path, str]] = None,
     seed: int = 42,
     eval_method: str = "topic",
     savedir: Optional[Union[Path, str]] = None,
@@ -248,24 +258,29 @@ def main(
         run_id += f"_{cot_reasoning_method}"
     elif method.lower() == "icl":
         run_id += f"_{icl_retriever}_{icl_num_examples}"
+    elif method.lower() == "ft":
+        run_id += f"_{ft_model.replace('/', '_')}"
     if savedir is not None:
         os.makedirs(savedir, exist_ok=True)
-        savepath = os.path.join(
-            savedir, f"{run_id}.json"
-        )
+        savepath = os.path.join(savedir, f"{run_id}.jsonl")
 
     if savepath is not None and os.path.isfile(savepath):
         with open(savepath, "r") as f:
-            cached_results = json.load(f)
+            with jsonlines.Reader(f) as reader:
+                cached_results = list(reader)
         num_correct = 0
-        for _, cache_labels in cached_results.items():
-            ypreds, gt = cache_labels["ypred"], cache_labels["ygt"]
+        for cache_labels in cached_results:
+            ypreds = cache_labels["prediction"]
+            gt = cache_labels["ground_truth"]
             num_correct += radgpt.utils.score(ypreds, gt)
-        acc = 100.0 * num_correct / len(cached_results.keys())
+        acc = 100.0 * num_correct / len(cached_results)
         click.secho(f"Accuracy: {acc:.6f}", bold=True)
 
         if eval_method != "topic":
             return
+        cached_results = {
+            str(idx): val for idx, val in enumerate(cached_results)
+        }
         img_stats = compute_imaging_results_from_topic_eval(cached_results, ac)
         click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
         click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
@@ -288,27 +303,22 @@ def main(
     system_prompt = radgpt.llm.get_system_prompt(
         method, rationale=cot_reasoning_method, study=(eval_method == "study")
     )
+    categories = "; ".join(
+        ac.panels
+        if eval_method == "panel"
+        else (ac.topics if eval_method == "topic" else ac.studies)
+    )
     if method.lower() == "cot":
-        system_prompt = system_prompt.format(
-            ac.panels
-            if eval_method == "panel"
-            else (ac.topics if eval_method == "topic" else ac.studies)
-        )
+        system_prompt = system_prompt.format(categories)
         llm.json_format = True
         llm.max_new_tokens = 512
     else:
-        system_prompt = system_prompt.format(
-            ac.panels
-            if eval_method == "panel"
-            else (ac.topics if eval_method == "topic" else ac.studies),
-            "Thoracic"
-            if eval_method == "panel"
-            else (
-                "Lung Cancer Screening"
-                if eval_method == "topic"
-                else "CT chest without IV contrast screening"
-            )
+        ex_answer = "Thoracic" if eval_method == "panel" else (
+            "Lung Cancer Screening"
+            if eval_method == "topic"
+            else "CT chest without IV contrast screening"
         )
+        system_prompt = system_prompt.format(categories, ex_answer)
     llm.set_system_prompt(system_prompt)
 
     # Load the retriever.
@@ -481,11 +491,9 @@ def main(
                         success.update()
                     else:
                         failure.update()
-                    all_results[idx] = {"ypred": ypreds, "ygt": gt}
-
-                    if savepath is not None and not fast_dev_run:
-                        with open(savepath, "w") as f:
-                            json.dump(all_results, f, indent=2)
+                    all_results[idx] = {
+                        "prediction": ypreds, "ground_truth": gt
+                    }
 
                 if fast_dev_run:
                     return
@@ -499,16 +507,27 @@ def main(
         with open(batch_fn, "w") as f:
             json.dump(submitted_jobs, f, indent=2)
         click.echo(submission)
-    else:
-        acc = 100.0 * count / len(all_results.keys())
-        click.secho(f"Accuracy: {acc:.6f}", bold=True)
+        return
 
-        if eval_method != "topic":
-            return
-        img_stats = compute_imaging_results_from_topic_eval(all_results, ac)
-        click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
-        click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
-        click.secho(f"False Negative Rate: {img_stats['fnr']:.6f}", bold=True)
+    acc = 100.0 * count / len(all_results.keys())
+    click.secho(f"Accuracy: {acc:.6f}", bold=True)
+
+    if eval_method != "topic":
+        return
+    img_stats = compute_imaging_results_from_topic_eval(all_results, ac)
+    click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
+    click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
+    click.secho(f"False Negative Rate: {img_stats['fnr']:.6f}", bold=True)
+
+    if savepath is not None:
+        all_results = [
+            all_results[k] for k in sorted([
+                int(k) for k in all_results.keys()
+            ])
+        ]
+        with open(savepath, "w") as f:
+            with jsonlines.Writer(f) as writer:
+                writer.write_all(all_results)
 
 
 if __name__ == "__main__":
