@@ -15,7 +15,7 @@ from .anthropic import ClaudeSonnet
 from .base import LLM, get_top_k_panels
 from .dbrx import DBRXInstruct
 from .mistral import Mistral8x7BInstruct
-from .meta import Llama3Instruct
+from .meta import Llama3Instruct, FineTunedLlama3Instruct
 from .openai import GPT4Turbo
 from .cohere import CommandRPlus
 
@@ -25,6 +25,7 @@ __all__ = [
     "CommandRPlus",
     "DBRXInstruct",
     "GPT4Turbo",
+    "FineTunedLlama3Instruct",
     "Llama3Instruct",
     "Mistral8x7BInstruct",
     "LLM",

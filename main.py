@@ -299,6 +299,8 @@ def main(
     llm_init_kwargs = {"seed": seed}
     if method.lower() == "rag":
         llm_init_kwargs["repetition_penalty"] = 1.5
+    if method.lower() == "ft":
+        llm_init_kwargs["model_name"] = ft_model
     llm, llm_name = getattr(radgpt.llm, llm)(**llm_init_kwargs), llm
     system_prompt = radgpt.llm.get_system_prompt(
         method, rationale=cot_reasoning_method, study=(eval_method == "study")

@@ -123,3 +123,4 @@ jama_raw.csv
 evidence/
 *.jsonl
 cases.txt
+*.db

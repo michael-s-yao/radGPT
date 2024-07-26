@@ -9,6 +9,8 @@ Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import abc
 import warnings
+from datasets import Dataset
+from pathlib import Path
 from pytorch_lightning import seed_everything
 from typing import Any, Dict, Optional, Sequence, Union
 
@@ -70,11 +72,36 @@ class LLM(abc.ABC):
         raise NotImplementedError
 
     def set_system_prompt(self, prompt: str) -> None:
+        """
+        Sets the system prompt of the language model to the input prompt.
+        Input:
+            prompt: the system prompt for the language model.
+        Returns:
+            None.
+        """
         if self.system_prompt is not None:
             warnings.warn(
                 "System prompt is already set. Overriding...", UserWarning
             )
         self.system_prompt = prompt
+
+    @classmethod
+    def submit_finetuning_job(
+        cls,
+        train: Union[Path, str, Dataset],
+        val: Union[Path, str, Dataset],
+        **kwargs
+    ) -> Optional[Any]:
+        """
+        Creates and submits a model finetuning job using the specified
+        training and validation datasets.
+        Input:
+            train: a file ID or local path to a training dataset.
+            val: a file ID or local path to a validation dataset.
+        Returns:
+            Varies by implementation.
+        """
+        raise NotImplementedError
 
 
 def get_top_k_panels(

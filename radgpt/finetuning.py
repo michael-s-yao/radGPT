@@ -1,14 +1,44 @@
+"""
+Utility functions for model finetuning.
 
+Author(s):
+    Michael Yao @michael-s-yao
+    Allison Chae @allisonjchae
+
+Licensed under the MIT License. Copyright University of Pennsylvania 2024.
+"""
 import json
 import numpy as np
+import pandas as pd
 from typing import Dict, Sequence, Optional, Tuple
 
 from .acr import AppropriatenessCriteria
-from .data import load_case_labels, hashme, read_synthetic_dataset
+from .data import (
+    load_case_labels,
+    hashme,
+    read_synthetic_dataset,
+    read_medbullets_dataset,
+    read_jama_cc_dataset,
+    read_nejm_dataset,
+    read_mimic_iv_dataset
+)
 from .llm import get_system_prompt
+from .utils import get_experiment_options
+
+
+def get_finetuning_partition_options() -> Sequence[str]:
+    """
+    Returns the RadCases dataset partitions implemented for finetuning.
+    Input:
+        None.
+    Returns:
+        The RadCases dataset partitions implemented for finetuning.
+    """
+    return ["synthetic", "mixed"]
 
 
 def build_finetuning_dataset(
+    partition: str = "synthetic",
     eval_method: str = "topic",
     val_frac: float = 0.1,
     seed: Optional[int] = 42
@@ -16,6 +46,8 @@ def build_finetuning_dataset(
     """
     Builds the training and validation dataset for LLM fine-tuning.
     Input:
+        partition: the partition of the RadCases dataset to use for
+            fine-tuning.
         eval_method: what evaluation metric to fine-tune the LLM on.
         val_frac: fraction of the dataset to use for model validation.
         seed: optional random seed.
@@ -23,15 +55,34 @@ def build_finetuning_dataset(
         train: dataset for model training for fine-tuning.
         val: dataset for model validation for fine-tuning.
     """
-    rng = np.random.default_rng(seed=seed)
+    if partition.lower() not in get_finetuning_partition_options():
+        raise NotImplementedError
 
+    rng = np.random.default_rng(seed=seed)
     ac = AppropriatenessCriteria()
-    y_gt = load_case_labels(dataset="synthetic")
+
+    if partition.lower() == "synthetic":
+        y_gt = load_case_labels(dataset="synthetic")
+        opts = [read_synthetic_dataset()]
+    else:
+        y_gt = pd.concat([
+            load_case_labels(dataset=ds).sample(
+                n=50, replace=False, random_state=seed
+            )
+            for ds in get_experiment_options()
+        ])
+        opts = [
+            read_synthetic_dataset(),
+            read_medbullets_dataset(),
+            read_jama_cc_dataset(),
+            read_nejm_dataset(),
+            read_mimic_iv_dataset()
+        ]
     users = filter(
         lambda case: hashme(case) in y_gt["case"].values.tolist(),
-        read_synthetic_dataset()
+        np.concatenate(opts)
     )
-    users = list(set(list(users)))
+    users = sorted(list(set(list(users))), key=hashme)
     val_idxs = rng.choice(
         len(users),
         size=round(min(max(val_frac, 0.0), 1.0) * len(users)),

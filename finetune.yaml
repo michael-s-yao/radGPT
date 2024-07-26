@@ -1,0 +1,28 @@
+---
+report_to: "tensorboard"
+learning_rate: 0.0002
+lr_scheduler_type: "constant"
+num_train_epochs: 3
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 2
+optim: adamw_torch
+logging_steps: 10
+save_strategy: epoch
+eval_strategy: epoch
+max_grad_norm: 0.3
+warmup_ratio: 0.03
+bf16: true
+tf32: true
+gradient_checkpointing: true
+fsdp: "full_shard auto_wrap offload"
+fsdp_config:
+  backward_prefetch: "backward_pre"
+  forward_prefetch: "false"
+  use_orig_params: "false"
+dataset_text_field: "text"
+max_seq_length: 3072
+dataset_kwargs: {
+  "add_special_tokens": False,
+  "append_concat_token": False,
+}

@@ -17,7 +17,7 @@ for ds in "synthetic" "medbullets" "jama_cc" "mimic_iv" "nejm"; do
       --by-$metric \
       --cot.reasoning_method default \
       --rag.retriever BM25Retriever \
-      --rag.top_k 1 \
+      --rag.top_k 8 \
       --rag.corpus MedRAG/textbooks \
       --icl.retriever MPNetRetriever \
       --icl.num_examples 4

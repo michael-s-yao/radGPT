@@ -12,6 +12,7 @@ import json
 import jsonlines
 import os
 import tempfile
+from datasets import Dataset
 from openai import OpenAI, RateLimitError
 from openai.types.batch import Batch
 from openai.types.fine_tuning import FineTuningJob
@@ -118,41 +119,44 @@ class GPT4Turbo(LLM):
             metadata=kwargs
         )
 
+    @classmethod
     def submit_finetuning_job(
-        self,
-        training_file: Union[Path, str],
-        validation_file: Union[Path, str],
+        cls,
+        train: Union[Path, str, Dataset],
+        val: Union[Path, str, Dataset],
+        seed: int = 42,
+        **kwargs
     ) -> FineTuningJob:
         """
         Creates and submits a model finetuning job using the specified
         training and validation datasets.
         Input:
-            training_file: an OpenAI file ID or local path to a training
+            train: an OpenAI file ID or local path to a training
                 dataset file.
-            validation_file: an OpenAI file ID or local path to a
+            val: an OpenAI file ID or local path to a
                 validation dataset file.
+            seed: random seed. Default 42.
         Returns:
             The submitted fine-tuning job.
         """
-        if os.path.isfile(training_file):
-            with open(training_file, "rb") as f:
-                training_file = self.client.files.create(
-                    file=f, purpose="fine-tune"
-                )
+        llm = cls(seed=seed)
+        if isinstance(train, Dataset) or isinstance(val, Dataset):
+            raise NotImplementedError
+        if os.path.isfile(train):
+            with open(train, "rb") as f:
+                train = llm.client.files.create(file=f, purpose="fine-tune")
         else:
-            training_file = self.client.files.retrieve(training_file)
+            train = llm.client.files.retrieve(train)
 
-        if os.path.isfile(validation_file):
-            with open(validation_file, "rb") as f:
-                validation_file = self.client.files.create(
-                    file=f, purpose="fine-tune"
-                )
+        if os.path.isfile(val):
+            with open(val, "rb") as f:
+                val = llm.client.files.create(file=f, purpose="fine-tune")
         else:
-            validation_file = self.client.files.retrieve(validation_file)
+            val = llm.client.files.retrieve(val)
 
-        return self.client.fine_tuning.jobs.create(
-            training_file=training_file.id,
-            validation_file=validation_file.id,
-            model=self.model_name,
-            seed=self.seed
+        return llm.client.fine_tuning.jobs.create(
+            training_file=train.id,
+            validation_file=val.id,
+            model=llm.model_name,
+            seed=llm.seed
         )
