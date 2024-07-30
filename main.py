@@ -293,7 +293,9 @@ def main(
         lambda case: radgpt.data.hashme(case) in y_gt["case"].values.tolist(),
         getattr(radgpt.data, f"read_{dataset}_dataset")()
     )
-    patient_cases = list(set(list(patient_cases)))
+    patient_cases = sorted(
+        list(set(list(patient_cases))), key=radgpt.data.hashme
+    )
 
     # Instantiate the LLM client.
     llm_init_kwargs = {"seed": seed}
