@@ -296,6 +296,19 @@ def main(
     patient_cases = sorted(
         list(set(list(patient_cases))), key=radgpt.data.hashme
     )
+    if method.lower() == "ft" and "RadCases-All" in ft_model:
+        excluded_cases, _ = radgpt.finetuning.build_finetuning_dataset(
+            partition="mixed", eval_method=eval_method, val_frac=0.1, seed=42
+        )
+        excluded_cases = list(
+            map(
+                lambda conversation: conversation["messages"][1]["content"],
+                excluded_cases
+            )
+        )
+        patient_cases = [
+            case for case in patient_cases if case not in excluded_cases
+        ]
 
     # Instantiate the LLM client.
     llm_init_kwargs = {"seed": seed}
