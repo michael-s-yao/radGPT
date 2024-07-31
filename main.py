@@ -296,7 +296,7 @@ def main(
     patient_cases = sorted(
         list(set(list(patient_cases))), key=radgpt.data.hashme
     )
-    if method.lower() == "ft" and "RadCases-All" in ft_model:
+    if method.lower() == "ft":
         excluded_cases, _ = radgpt.finetuning.build_finetuning_dataset(
             partition="mixed", eval_method=eval_method, val_frac=0.1, seed=42
         )

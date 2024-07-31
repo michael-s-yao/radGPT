@@ -160,3 +160,7 @@ class GPT4Turbo(LLM):
             model=llm.model_name,
             seed=llm.seed
         )
+
+
+class GPT4oMini(GPT4Turbo):
+    model_name: str = "gpt-4o-mini-2024-07-18"

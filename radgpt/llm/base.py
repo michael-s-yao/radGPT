@@ -8,14 +8,18 @@ Author(s):
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import abc
+import json
+import torch
 import warnings
 from datasets import Dataset
 from pathlib import Path
 from pytorch_lightning import seed_everything
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import Any, Dict, Optional, Sequence, Union
 
 from ..acr import AppropriatenessCriteria
 from ..retrieval import Document
+from ..utils import import_flash_attn
 
 
 # Baseline user prompt without any engineering.
@@ -102,6 +106,81 @@ class LLM(abc.ABC):
             Varies by implementation.
         """
         raise NotImplementedError
+
+
+class FineTunedLocalLLM(LLM):
+    def __init__(self, model_name: Union[Path, str], seed: int = 42, **kwargs):
+        """
+        Args:
+            model_name: the local model directory of the fine-tuned model.
+            seed: random seed. Default 42.
+        """
+        super(FineTunedLocalLLM, self).__init__(seed=seed, **kwargs)
+
+        self.model_path = model_name
+        self.dtype = torch.float16
+        if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+            self.dtype = torch.bfloat16
+
+        attn_and_autocast = import_flash_attn()
+        self.autocast_context = attn_and_autocast["autocast_context"]
+        self.model = AutoModelForCausalLM.from_pretrained(
+          self.model_path,
+          torch_dtype=self.dtype,
+          trust_remote_code=True,
+          device_map="auto"
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+
+    @torch.inference_mode()
+    def query(self, prompt: str) -> Sequence[str]:
+        """
+        Input:
+            prompt: an input prompt to ask the large language model (LLM).
+        Returns:
+            The model response.
+        """
+        messages = []
+        if hasattr(self, "system_prompt") and self.system_prompt:
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        if self.json_format:
+            messages.append({
+                "role": "assistant",
+                "content": "Here is the JSON requested:\n{"
+            })
+
+        with self.autocast_context:
+            tokens = self.tokenizer.apply_chat_template(
+                messages, return_tensors="pt"
+            )
+
+            outputs = self.model.generate(
+                tokens.to(self.model.device),
+                max_new_tokens=self.max_new_tokens,
+                eos_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.eos_token_id,
+                do_sample=True,
+                top_p=self.top_p,
+                top_k=self.top_k,
+                repetition_penalty=self.repetition_penalty
+            )
+        response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+        sidx = max(response.find("assistant"), 0) + len("assistant")
+        eidx = response.find("}", sidx) + 1
+        response = response[sidx:eidx].strip()
+        if not response.startswith("{"):
+            response = "{" + response
+
+        try:
+            output = json.loads(response)["answer"]
+            if isinstance(output, list):
+                return output
+            return [output]
+        except (json.JSONDecodeError, KeyError):
+            return [response]
 
 
 def get_top_k_panels(
