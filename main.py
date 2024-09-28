@@ -46,13 +46,15 @@ METHODS_TO_PRETTY_NAMES: Dict[str, str] = {
 
 def compute_imaging_results_from_topic_eval(
     topic_results: Dict[str, Dict[str, Sequence[str]]],
-    ac: radgpt.AppropriatenessCriteria
+    ac: radgpt.AppropriatenessCriteria,
+    eval_method: str = "topic",
 ) -> Dict[str, float]:
     """
     Computes the imaging statistics from an ACR AC topic evaluation.
     Input:
         topic_results: a dictionary of the ACR AC topic evaluation results.
         ac: an instance of the ACR Appropriateness Criteria.
+        eval_method: the evaluation method.
     Returns:
         A dictionary containing the following values:
             acc: the accuracy of the imaging recommendations.
@@ -69,16 +71,17 @@ def compute_imaging_results_from_topic_eval(
         ypreds = list(
             filter(
                 lambda tt: any([bool(tt in yy) for yy in ypreds]),
-                ac.topics
+                ac.topics if eval_method == "topic" else ac.studies
             )
         )
         if len(ypreds) == 0:
             num_cases -= 1
             continue
-        ypreds = sum(
-            [ac.map_topic_to_imaging_study(yy) for yy in ypreds], []
-        )
-        gt = sum([ac.map_topic_to_imaging_study(yy) for yy in gt], [])
+        if eval_method.lower() == "topic":
+            ypreds = sum(
+                [ac.map_topic_to_imaging_study(yy) for yy in ypreds], []
+            )
+            gt = sum([ac.map_topic_to_imaging_study(yy) for yy in gt], [])
         nfn += int((ypreds == [no_img_sts]) and (no_img_sts not in gt))
         nfp += int((gt == [no_img_sts]) and (no_img_sts not in ypreds))
         num_correct += radgpt.utils.score(ypreds, gt)
@@ -139,6 +142,7 @@ def compute_imaging_results_from_topic_eval(
     help="Number of documents to retrieve for RAG."
 )
 @click.option(
+    "--cot.reasoning-method",
     "--cot.reasoning_method",
     "cot_reasoning_method",
     type=click.Choice(
@@ -276,12 +280,14 @@ def main(
         acc = 100.0 * num_correct / len(cached_results)
         click.secho(f"Accuracy: {acc:.6f}", bold=True)
 
-        if eval_method != "topic":
+        if eval_method.lower() not in ["topic", "study"]:
             return
         cached_results = {
             str(idx): val for idx, val in enumerate(cached_results)
         }
-        img_stats = compute_imaging_results_from_topic_eval(cached_results, ac)
+        img_stats = compute_imaging_results_from_topic_eval(
+            cached_results, ac, eval_method
+        )
         click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
         click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
         click.secho(f"False Negative Rate: {img_stats['fnr']:.6f}", bold=True)
@@ -529,12 +535,11 @@ def main(
     acc = 100.0 * count / len(all_results.keys())
     click.secho(f"Accuracy: {acc:.6f}", bold=True)
 
-    if eval_method != "topic":
-        return
-    img_stats = compute_imaging_results_from_topic_eval(all_results, ac)
-    click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
-    click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
-    click.secho(f"False Negative Rate: {img_stats['fnr']:.6f}", bold=True)
+    if eval_method == "topic":
+        img_stats = compute_imaging_results_from_topic_eval(all_results, ac)
+        click.secho(f"Imaging Accuracy: {img_stats['acc']:.6f}", bold=True)
+        click.secho(f"False Positive Rate: {img_stats['fpr']:.6f}", bold=True)
+        click.secho(f"False Negative Rate: {img_stats['fnr']:.6f}", bold=True)
 
     if savepath is not None:
         all_results = [

@@ -15,9 +15,10 @@ from .anthropic import ClaudeSonnet
 from .base import LLM, FineTunedLocalLLM, get_top_k_panels
 from .dbrx import DBRXInstruct
 from .mistral import Mistral8x7BInstruct
-from .meta import Llama3Instruct, FineTunedLlama3Instruct
-from .openai import GPT4Turbo, GPT4oMini
+from .meta import Llama3Instruct, Llama3_1Instruct, FineTunedLlama3Instruct
+from .openai import GPT4Turbo, GPT4oMini, GPT4o, OpenAIModel
 from .cohere import CommandRPlus
+from .together import TogetherAILLM
 
 
 __all__ = [
@@ -26,9 +27,13 @@ __all__ = [
     "DBRXInstruct",
     "GPT4Turbo",
     "GPT4oMini",
+    "GPT4o",
+    "OpenAIModel",
     "FineTunedLlama3Instruct",
     "Llama3Instruct",
+    "Llama3_1Instruct",
     "Mistral8x7BInstruct",
+    "TogetherAILLM",
     "LLM",
     "FineTunedLocalLLM",
     "get_llm_options",

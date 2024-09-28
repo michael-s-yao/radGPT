@@ -29,10 +29,38 @@ USER_PROMPT_BASE: str = (
 )
 
 
+USER_PROMPT_BASE_MULTIPLE: str = (
+    "Patient Case: {case}\n\n"
+    "Select up to {top_k} categories that best describe the patient's "
+    "chief complaint."
+)
+
+
+USER_PROMPT_BASE_UNLIMITED: str = (
+    "Patient Case: {case}\n\n"
+    "Which categories best describes the patient's chief complaint? "
+    "Select only the most relevant category or categories."
+)
+
+
 # Baseline user prompt without any engineering.
 USER_PROMPT_BASE_STUDY: str = (
     "Patient Case: {case}\n\n"
     "Which imaging study (if any) is most appropriate for this patient?"
+)
+
+
+USER_PROMPT_BASE_STUDY_MULTIPLE: str = (
+    "Patient Case: {case}\n\n"
+    "Select up to {top_k} imaging studies that are most appropriate for "
+    "this patient."
+)
+
+
+USER_PROMPT_BASE_STUDY_UNLIMITED: str = (
+    "Patient Case: {case}\n\n"
+    "Which imaging studies are most appropriate for this patient? "
+    "Select only the most relevant study or studies."
 )
 
 
@@ -43,8 +71,26 @@ USER_PROMPT_RAG: str = (
 )
 
 
+USER_PROMPT_RAG_MULTIPLE: str = (
+    "Here is some context for you to consider:\n{context}\n\n"
+    f"### User:\n{USER_PROMPT_BASE_MULTIPLE}\n\n### Assistant:\n"
+)
+
+
+USER_PROMPT_RAG_UNLIMITED: str = (
+    "Here is some context for you to consider:\n{context}\n\n"
+    f"### User:\n{USER_PROMPT_BASE_UNLIMITED}\n\n### Assistant:\n"
+)
+
+
 # User prompt for in-context learning (ICL).
 USER_PROMPT_ICL: str = f"{{context}}\n\n{USER_PROMPT_BASE}"
+
+
+USER_PROMPT_ICL_MULTIPLE: str = f"{{context}}\n\n{USER_PROMPT_BASE_MULTIPLE}"
+
+
+USER_PROMPT_ICL_UNLIMITED: str = f"{{context}}\n\n{USER_PROMPT_BASE_UNLIMITED}"
 
 
 class LLM(abc.ABC):
@@ -210,19 +256,50 @@ def get_top_k_panels(
     Returns:
         The top k predictions from the LLM, or a batch request if applicable.
     """
-    if method.lower() in ["prompting", "ft"]:
+    if method.lower() in ["prompting", "ft", "cot"]:
         if kwargs.get("study", False):
-            prompt = USER_PROMPT_BASE_STUDY.format(case=case)
+            if top_k > 1:
+                prompt = USER_PROMPT_BASE_STUDY_MULTIPLE.format(
+                    case=case, top_k=top_k
+                )
+            elif top_k <= 0:
+                prompt = USER_PROMPT_BASE_STUDY_UNLIMITED.format(case=case)
+            else:
+                prompt = USER_PROMPT_BASE_STUDY.format(case=case)
+        elif top_k > 1:
+            prompt = USER_PROMPT_BASE_MULTIPLE.format(case=case, top_k=top_k)
+        elif top_k <= 0:
+            prompt = USER_PROMPT_BASE_UNLIMITED.format(case=case)
         else:
             prompt = USER_PROMPT_BASE.format(case=case)
     elif method.lower() == "rag":
-        prompt = USER_PROMPT_RAG.format(
-            case=case, context=("\n".join([doc.text for doc in rag_context]))
-        )
-    elif method.lower() == "cot":
-        prompt = USER_PROMPT_BASE.format(case=case)
+        if top_k > 1:
+            prompt = USER_PROMPT_RAG_MULTIPLE.format(
+                case=case,
+                top_k=top_k,
+                context=("\n".join([doc.text for doc in rag_context]))
+            )
+        elif top_k <= 0:
+            prompt = USER_PROMPT_RAG_UNLIMITED.format(
+                case=case,
+                context=("\n".join([doc.text for doc in rag_context]))
+            )
+        else:
+            prompt = USER_PROMPT_RAG.format(
+                case=case,
+                context=("\n".join([doc.text for doc in rag_context]))
+            )
     elif method.lower() == "icl":
-        prompt = USER_PROMPT_ICL.format(case=case, context=icl_context)
+        if top_k > 1:
+            prompt = USER_PROMPT_ICL_MULTIPLE.format(
+                case=case, top_k=top_k, context=icl_context
+            )
+        elif top_k <= 0:
+            prompt = USER_PROMPT_ICL_UNLIMITED.format(
+                case=case, context=icl_context
+            )
+        else:
+            prompt = USER_PROMPT_ICL.format(case=case, context=icl_context)
     else:
         raise NotImplementedError
 

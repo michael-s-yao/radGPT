@@ -85,13 +85,6 @@ def write_jsonlines_to_tmp(
     help="The base LLM model to use."
 )
 @click.option(
-    "--model-name",
-    type=str,
-    default="gpt-4o-mini-2024-07-18",
-    show_default=True,
-    help="The LLM model name to use."
-)
-@click.option(
     "--by-panel",
     "eval_method",
     type=str,
@@ -133,16 +126,13 @@ def main(
     train_fn: Optional[Union[Path, str]] = None,
     val_fn: Optional[Union[Path, str]] = None,
     config: Optional[Union[Path, str]] = None,
-    llm: str = "GPT4Turbo",
-    model_name: Optional[str] = "gpt-4o-mini-2024-07-18",
+    llm: str = "GPT4oMini",
     eval_method: str = "topic",
     val_frac: float = 0.1,
     seed: int = 42
 ):
     """Finetune an LLM model on the synthetic RadCases dataset."""
     llm, llm_name = getattr(radgpt.llm, llm), llm
-    if model_name is not None and model_name.title() != "None":
-        llm.model_name = model_name
 
     if train_fn is None or val_fn is None:
         train, val = radgpt.finetuning.build_finetuning_dataset(
@@ -151,7 +141,7 @@ def main(
             val_frac=val_frac,
             seed=seed
         )
-        if llm_name == "GPT4Turbo":
+        if issubclass(llm, radgpt.llm.OpenAIModel):
             train_tmp, val_tmp = NamedTemporaryFile(), NamedTemporaryFile()
             train_fn, val_fn = train_tmp.name, val_tmp.name
             write_jsonlines_to_tmp(train, train_fn)
@@ -161,7 +151,7 @@ def main(
             train_input = Dataset.from_pandas(pd.json_normalize(train))
             val_input = Dataset.from_pandas(pd.json_normalize(val))
 
-    if llm_name == "GPT4Turbo":
+    if issubclass(llm, radgpt.llm.OpenAIModel):
         click.echo(
             llm(seed=seed).submit_finetuning_job(train_input, val_input)
         )

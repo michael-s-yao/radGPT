@@ -127,7 +127,8 @@ class AppropriatenessCriteria:
         Returns:
             A list of the appropriate imaging studies for the topic.
         """
-        assert topic in self.topics
+        if topic not in self.topics:
+            return []
         guide = next(
             filter(lambda doc: topic == doc["Topic"], self.guidelines)
         )

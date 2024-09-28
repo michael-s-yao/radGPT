@@ -165,15 +165,15 @@ class Llama3Instruct(LLM):
         val = val.map(template_dataset, remove_columns=["messages"])
 
         peft_config_default_kwargs = {
-            "lora_alpha": 8,
-            "lora_dropout": 0.05,
-            "r": 16,
+            "lora_alpha": 16,
+            "lora_dropout": 0.0,
+            "r": 512,
             "bias": "none",
             "target_modules": "all-linear",
             "task_type": "CAUSAL_LM",
         }
         peft_config_default_kwargs.update(peft_config_kwargs)
-        peft_config = LoraConfig(peft_config_default_kwargs)
+        peft_config = LoraConfig(**peft_config_default_kwargs)
 
         dtype = torch.float16
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -215,6 +215,10 @@ class Llama3Instruct(LLM):
         return trainer.save_model()
 
 
+class Llama3_1Instruct(Llama3Instruct):
+    hf_repo_name: str = "meta-llama/Meta-Llama-3.1-70B-Instruct"
+
+
 class FineTunedLlama3Instruct(LLM):
     def __init__(self, model_name: Union[Path, str], seed: int = 42, **kwargs):
         """
@@ -232,10 +236,10 @@ class FineTunedLlama3Instruct(LLM):
         attn_and_autocast = import_flash_attn()
         self.autocast_context = attn_and_autocast["autocast_context"]
         self.model = AutoPeftModelForCausalLM.from_pretrained(
-          self.model_name,
-          torch_dtype=self.dtype,
-          quantization_config={"load_in_4bit": True},
-          device_map="auto"
+            self.model_name,
+            torch_dtype=self.dtype,
+            quantization_config={"load_in_4bit": True},
+            device_map="auto"
         )
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 

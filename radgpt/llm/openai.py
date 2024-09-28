@@ -7,6 +7,7 @@ Author(s):
 
 Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
+import abc
 import backoff
 import json
 import jsonlines
@@ -22,18 +23,28 @@ from typing import Any, Dict, Sequence, Union
 from .base import LLM
 
 
-class GPT4Turbo(LLM):
-    model_name: str = "gpt-4-turbo"
-
+class OpenAIModel(LLM, abc.ABC):
     def __init__(self, seed: int = 42, **kwargs):
         """
         Args:
             seed: random seed. Default 42.
         """
-        super(GPT4Turbo, self).__init__(seed=seed, **kwargs)
+        super(OpenAIModel, self).__init__(seed=seed, **kwargs)
 
         self.json_format = True
         self.client = OpenAI()
+
+    @property
+    @abc.abstractmethod
+    def model_name(self) -> str:
+        """
+        Returns the name of the model.
+        Input:
+            None.
+        Returns:
+            The name of the model.
+        """
+        raise NotImplementedError
 
     @backoff.on_exception(backoff.expo, RateLimitError)
     def query(self, prompt: str) -> Sequence[str]:
@@ -162,5 +173,19 @@ class GPT4Turbo(LLM):
         )
 
 
-class GPT4oMini(GPT4Turbo):
-    model_name: str = "gpt-4o-mini-2024-07-18"
+class GPT4oMini(OpenAIModel):
+    @property
+    def model_name(self) -> str:
+        return "gpt-4o-mini-2024-07-18"
+
+
+class GPT4o(OpenAIModel):
+    @property
+    def model_name(self) -> str:
+        return "gpt-4o-2024-05-13"
+
+
+class GPT4Turbo(OpenAIModel):
+    @property
+    def model_name(self) -> str:
+        return "gpt-4-turbo"
