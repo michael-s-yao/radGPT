@@ -121,7 +121,7 @@ class Llama3Instruct(LLM):
             if isinstance(output, list):
                 return output
             return [output]
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, TypeError):
             return [output]
 
     @classmethod
@@ -217,6 +217,10 @@ class Llama3Instruct(LLM):
 
 class Llama3_1Instruct(Llama3Instruct):
     hf_repo_name: str = "meta-llama/Meta-Llama-3.1-70B-Instruct"
+
+
+class Meditron(Llama3Instruct):
+    hf_repo_name: str = "OpenMeditron/Meditron3-70B"
 
 
 class FineTunedLlama3Instruct(LLM):

@@ -183,6 +183,7 @@ def read_mimic_iv_dataset(
     """
     patients = pd.read_csv(patients_fn)
     notes = pd.read_csv(notes_fn)
+
     notes = notes[notes["subject_id"].isin(patients["subject_id"])]
     name = censusname.Censusname(nameformat="{surname}")
     random.seed(seed)
@@ -201,7 +202,10 @@ def read_mimic_iv_dataset(
 
         txt = txt.strip().replace("\n", " ").replace("\r", " ")
         txt = txt.replace("  ", " ")
-        txt = txt + "." if txt[-1] != "." else txt
+        try:
+            txt = txt + "." if txt[-1] != "." else txt
+        except Exception:
+            continue
 
         metadata = patients[patients["subject_id"] == note["subject_id"]]
         age = metadata["anchor_age"].item()

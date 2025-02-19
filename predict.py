@@ -261,7 +261,8 @@ def main(
         answers.append(ypreds)
 
     if output_fn is not None:
-        os.makedirs(os.path.dirname(output_fn), exist_ok=True)
+        if len(os.path.dirname(output_fn)) > 0:
+            os.makedirs(os.path.dirname(output_fn), exist_ok=True)
         with open(output_fn, "w") as f:
             f.write("\n".join(["\t".join(a) for a in answers]))
 

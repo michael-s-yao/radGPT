@@ -9,8 +9,11 @@ Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import re
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from contextlib import nullcontext
-from typing import ContextManager, Dict, Sequence, Union
+from transformers import AutoModel
+from typing import ContextManager, Dict, Final, Sequence, Union
 
 from .data import __all__ as data_fns
 
@@ -79,12 +82,15 @@ def score(preds: Sequence[str], gts: Sequence[str]) -> bool:
     Returns:
         Whether at least one ground-truth label is in the list of predictions.
     """
-    return any([
-        "".join(filter(str.isalpha, y.lower()))[:-1] in "".join(
-            filter(str.isalpha, ypred.lower())
-        )
-        for ypred in preds for y in gts
-    ])
+    try:
+        return any([
+            "".join(filter(str.isalpha, y.lower()))[:-1] in "".join(
+                filter(str.isalpha, ypred.lower())
+            )
+            for ypred in preds for y in gts
+        ])
+    except Exception:
+        return False
 
 
 def split_into_sentences(text: str) -> Sequence[str]:
@@ -146,3 +152,60 @@ def split_into_sentences(text: str) -> Sequence[str]:
     if sentences and not sentences[-1]:
         sentences = sentences[:-1]
     return sentences
+
+
+class NVEmbedv2(nn.Module):
+    hf_repo_name: Final[str] = "nvidia/NV-Embed-v2"
+
+    trust_remote_code: bool = True
+
+    max_length: Final[int] = 4096
+
+    def __init__(self, **kwargs):
+        """
+        Args:
+            None.
+        """
+        super(NVEmbedv2, self).__init__()
+        self.dtype = torch.float16
+        if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+            self.dtype = torch.bfloat16
+
+        self.model = AutoModel.from_pretrained(
+            self.hf_repo_name,
+            trust_remote_code=self.trust_remote_code,
+            device_map="auto",
+            torch_dtype=self.dtype,
+            **kwargs
+        )
+
+    @torch.no_grad()
+    def forward(self, inp: Union[str, Sequence[str]]) -> torch.Tensor:
+        """
+        Forward pass through the embedding model.
+        Input:
+            inp: A string or list of strings to embed.
+        Returns:
+            The embeddings of shape BD, where D is the embedding dimension
+            and B is the number of inputs.
+        """
+        if isinstance(inp, str):
+            inp = [inp]
+        z = self.model.encode(
+            inp, instruction="", max_length=self.max_length
+        )
+        return F.normalize(z, p=2, dim=1)
+
+    def similarity_score(self, inp: str, corpus: torch.Tensor) -> torch.Tensor:
+        """
+        Computes the similarity score between an input query and a corpus of
+        embeddings.
+        Input:
+            inp: A string query.
+            corpus: The corpus of embeddings to compare the string to of shape
+                BD, where D is the embedding dimension and B is the size of the
+                corpus.
+        Returns:
+            The similarity scores as a vector of length B.
+        """
+        return self(inp).to(corpus) @ corpus.T
