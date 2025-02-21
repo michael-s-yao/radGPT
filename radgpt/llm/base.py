@@ -17,7 +17,6 @@ from pytorch_lightning import seed_everything
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import Any, Dict, Optional, Sequence, Union
 
-from ..acr import AppropriatenessCriteria
 from ..retrieval import Document
 from ..utils import import_flash_attn
 
@@ -231,7 +230,6 @@ class FineTunedLocalLLM(LLM):
 
 def get_top_k_panels(
     case: str,
-    criteria: AppropriatenessCriteria,
     llm: LLM,
     top_k: int,
     method: str,
@@ -245,7 +243,6 @@ def get_top_k_panels(
     Returns the top k predictions for an input patient case.
     Input:
         case: the input patient case.
-        criteria: the reference ACR Appropriateness Criteria.
         llm: the Large Language Model to use to process the patient case.
         top_k: the number of predictions to return.
         method: the method to use to generate the predictions.
@@ -289,7 +286,7 @@ def get_top_k_panels(
                 case=case,
                 context=("\n".join([doc.text for doc in rag_context]))
             )
-    elif method.lower() == "icl":
+    elif method.lower() in ["icl", "icl-cot"]:
         if top_k > 1:
             prompt = USER_PROMPT_ICL_MULTIPLE.format(
                 case=case, top_k=top_k, context=icl_context

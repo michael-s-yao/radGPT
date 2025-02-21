@@ -57,7 +57,7 @@ import pandas as pd
 import random
 import re
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Optional, Sequence, Union
 
 from .utils import split_into_sentences
 
@@ -87,15 +87,28 @@ def hashme(string: str) -> str:
 
 
 def read_synthetic_dataset(
-    dataset_url: str = os.path.join(os.path.dirname(__file__), "synthetic.csv")
+    dataset_url: Optional[str] = None,
+    generating_model: Optional[str] = "gpt-3.5-turbo-0125"
 ) -> np.ndarray:
     """
     Returns the synthetic LLM-generated dataset of patient one-liners.
     Input:
-        dataset_url: The URL or relative path to the dataset.
+        dataset_url: an optional URL or relative path to the dataset.
+        generating_model: the model used to generate the synthetic dataset.
+            Must be specified if dataset_url is not provided.
     Returns:
         An array of all the patient one-liners in the synthetic dataset.
     """
+    if dataset_url is None:
+        assert generating_model in [
+            "gpt-3.5-turbo-0125", "meta-llama/Llama-2-7b-chat-hf"
+        ]
+        prefix = int(generating_model == "meta-llama/Llama-2-7b-chat-hf") * (
+            "llama2-"
+        )
+        dataset_url = os.path.join(
+            os.path.dirname(__file__), f"{prefix}synthetic.csv"
+        )
     return pd.read_csv(dataset_url)["case_readable"].to_numpy()
 
 

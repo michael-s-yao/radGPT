@@ -14,6 +14,7 @@ import json
 import jsonlines
 import logging
 import os
+import pandas as pd
 import re
 from pathlib import Path
 from typing import Dict, Optional, Sequence, Union
@@ -40,6 +41,10 @@ METHODS_TO_PRETTY_NAMES: Dict[str, str] = {
         "({rag_top_k} Documents from {rag_corpus} using {rag_retriever})"
     ),
     "cot": "Chain-of-Thought Prompting ({cot_reasoning_method} Reasoning)",
+    "icl-cot": (
+        "In-Context Learning ({icl_num_examples} Samples from {icl_retriever})"
+        " with Chain-of-Thought Prompting ({cot_reasoning_method} Reasoning)"
+    ),
     "ft": "Fine-Tuned Baseline"
 }
 
@@ -207,6 +212,18 @@ def compute_imaging_results_from_topic_eval(
     help="Whether to evaluate the LLM by imaging studies."
 )
 @click.option(
+    "--by-relevance",
+    "eval_method",
+    type=str,
+    flag_value="relevance",
+    help="Whether to evaluate the LLM by ACR AC Topic existence."
+)
+@click.option(
+    "--use-full-dataset/--use-pruned-dataset",
+    default=False,
+    help="Whether to include cases without an associated ACR Topic."
+)
+@click.option(
     "--savedir",
     type=str,
     default=None,
@@ -239,10 +256,10 @@ def main(
     ft_model: Optional[Union[Path, str]] = None,
     seed: int = 42,
     eval_method: str = "topic",
+    use_full_dataset: bool = False,
     savedir: Optional[Union[Path, str]] = None,
     fast_dev_run: bool = False,
-    verbose: bool = True,
-    **kwargs
+    verbose: bool = True
 ):
     """Aligning LLMs with ACR Appropriateness Criteria."""
     logging.basicConfig(
@@ -262,6 +279,8 @@ def main(
         run_id += f"_{cot_reasoning_method}"
     elif method.lower() == "icl":
         run_id += f"_{icl_retriever}_{icl_num_examples}"
+    elif method.lower() == "icl-cot":
+        run_id += f"_{icl_retriever}_{icl_num_examples}_{cot_reasoning_method}"
     elif method.lower() == "ft":
         run_id += f"_{ft_model.replace('/', '_')}"
     if savedir is not None:
@@ -296,12 +315,23 @@ def main(
     # Load the specified dataset of patient one-liners.
     y_gt = radgpt.data.load_case_labels(dataset=dataset)
     patient_cases = filter(
-        lambda case: radgpt.data.hashme(case) in y_gt["case"].values.tolist(),
+        lambda case: use_full_dataset or (
+            radgpt.data.hashme(case) in y_gt["case"].values.tolist()
+        ),
         getattr(radgpt.data, f"read_{dataset}_dataset")()
     )
     patient_cases = sorted(
         list(set(list(patient_cases))), key=radgpt.data.hashme
     )
+    if use_full_dataset:
+        addendum = []
+        for case in patient_cases:
+            key = radgpt.data.hashme(case)
+            if key in y_gt["case"].values.tolist():
+                continue
+            addendum.append([key, "None", "None"])
+        y_gt = pd.concat([y_gt, pd.DataFrame(addendum, columns=y_gt.columns)])
+
     if method.lower() == "ft":
         excluded_cases, _ = radgpt.finetuning.build_finetuning_dataset(
             partition="mixed", eval_method=eval_method, val_frac=0.1, seed=42
@@ -325,14 +355,21 @@ def main(
 
     llm, llm_name = getattr(radgpt.llm, llm)(**llm_init_kwargs), llm
     system_prompt = radgpt.llm.get_system_prompt(
-        method, rationale=cot_reasoning_method, study=(eval_method == "study")
+        method,
+        rationale=cot_reasoning_method,
+        study=(eval_method == "study"),
+        relevance=(eval_method == "relevance")
     )
     categories = "; ".join(
         ac.panels
         if eval_method == "panel"
-        else (ac.topics if eval_method == "topic" else ac.studies)
+        else (
+            ac.topics
+            if eval_method in ["topic", "relevance"]
+            else ac.studies
+        )
     )
-    if method.lower() == "cot":
+    if method.lower() in ["cot", "icl-cot"]:
         system_prompt = system_prompt.format(categories)
         llm.json_format = True
         llm.max_new_tokens = 512
@@ -340,7 +377,11 @@ def main(
         ex_answer = "Thoracic" if eval_method == "panel" else (
             "Lung Cancer Screening"
             if eval_method == "topic"
-            else "CT chest without IV contrast screening"
+            else (
+                "true"
+                if eval_method == "relevance"
+                else "CT chest without IV contrast screening"
+            )
         )
         system_prompt = system_prompt.format(categories, ex_answer)
     llm.set_system_prompt(system_prompt)
@@ -348,13 +389,22 @@ def main(
     # Load the retriever.
     if method.lower() == "rag":
         retriever = radgpt.retrieval.get_retriever(rag_retriever, rag_corpus)
-    elif method.lower() == "icl":
-        y_ref = radgpt.data.load_case_labels(dataset="synthetic")
+    elif method.lower() in ["icl", "icl-cot"]:
+        if dataset == "synthetic":
+            y_ref = radgpt.data.load_case_labels(dataset="llama2-synthetic")
+        else:
+            y_ref = radgpt.data.load_case_labels(dataset="synthetic")
         ref_ds = filter(
             lambda case: bool(
                 radgpt.data.hashme(str(case)) in y_ref["case"].tolist()
             ),
-            radgpt.data.read_synthetic_dataset()
+            radgpt.data.read_synthetic_dataset(
+                generating_model=(
+                    "meta-llama/Llama-2-7b-chat-hf"
+                    if dataset == "synthetic"
+                    else "gpt-3.5-turbo-0125"
+                )
+            )
         )
         retriever = radgpt.retrieval.get_retriever(
             icl_retriever, corpus_dataset=list(ref_ds)
@@ -447,6 +497,8 @@ def main(
                     "panel" if eval_method == "panel" else "topic"
                 ]
                 gt = re.split(r",(?=\S)", gt.item())
+                if eval_method == "relevance":
+                    gt = ["false" if "None" in gt else "true"]
                 if downloaded_results is not None:
                     ypreds = downloaded_results[idx]
                 else:
@@ -455,7 +507,7 @@ def main(
                         rag_context = retriever.retrieve(
                             str(case), k=rag_top_k
                         )
-                    elif method.lower() == "icl":
+                    elif method.lower() in ["icl", "icl-cot"]:
                         icl_context = retriever.retrieve(
                             str(case), k=icl_num_examples
                         )
@@ -483,7 +535,6 @@ def main(
                         ])
                     ypreds = radgpt.llm.get_top_k_panels(
                         case=str(case),
-                        criteria=ac,
                         llm=llm,
                         top_k=1,
                         method=method,
@@ -492,7 +543,7 @@ def main(
                         icl_context=icl_context,
                         study=(eval_method == "study")
                     )
-                    if method.lower() == "cot" and (
+                    if method.lower() in ["cot", "icl-cot"] and (
                         cot_reasoning_method.lower() == "bayesian"
                     ):
                         ypreds = [_y[:_y.find("rationale")] for _y in ypreds]

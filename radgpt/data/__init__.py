@@ -49,8 +49,8 @@ def load_case_labels(
     """
     if fn_or_url:
         return pd.read_csv(fn_or_url)
-
     data_files = {
+        "llama2-synthetic": "llama2-synthetic.jsonl",
         "synthetic": "synthetic.jsonl",
         "medbullets": "usmle.jsonl",
         "jama_cc": "jama.jsonl",

@@ -75,7 +75,7 @@ def get_method_options() -> Sequence[str]:
     Returns:
         A list of the implemented LLM prompting options.
     """
-    return ["prompting", "rag", "icl", "cot", "ft"]
+    return ["prompting", "rag", "icl", "cot", "ft", "icl-cot"]
 
 
 DEFAULT_SYSTEM_PROMPT: str = (
@@ -95,6 +95,19 @@ IMAGING_SYSTEM_PROMPT: str = (
     'your output in JSON format with the single key "answer"\n\nCategories: '
     "{0}\n\nExample: 49M with HTN, IDDM, HLD, and 20 pack-year smoking hx p/w "
     '4 mo hx SOB and non-productive cough.\nAnswer: {{"answer": "{1}"}}'
+)
+
+
+RELEVANCE_SYSTEM_PROMPT: str = (
+    "You are a clinical decision support tool that determines if a set "
+    "of medical guidelines is relevant for a patient. If there exists a "
+    'relevant category that describes the patient, return "true". If not, '
+    'return "false". Assume that the guidelines are only relevant for adult '
+    'patients unless otherwise specified. Provide your output in JSON format '
+    'with the single key "answer"\n\nCategories: {0}\n\nExample: 20F with '
+    'new skin rash.\nAnswer: {{"answer": "false"}}\n\nExample: 49M with '
+    'HTN, IDDM, HLD, and 20 pack-year smoking hx p/w 4 mo hx SOB and '
+    'non-productive cough.\nAnswer: {{"answer": "{1}"}}'
 )
 
 
@@ -181,12 +194,14 @@ def get_system_prompt(method: str, **kwargs) -> str:
         The corresponding system prompt.
     """
     if method.lower() in ["prompting", "icl", "ft"]:
-        if kwargs.get("study", False):
+        if kwargs.get("relevance", True):
+            return RELEVANCE_SYSTEM_PROMPT
+        elif kwargs.get("study", False):
             return IMAGING_SYSTEM_PROMPT
         return DEFAULT_SYSTEM_PROMPT
     elif method.lower() == "rag":
         return RAG_SYSTEM_PROMPT
-    elif method.lower() == "cot":
+    elif method.lower() in ["cot", "icl-cot"]:
         assert "rationale" in kwargs.keys(), (
             "Chain-of-thought reasoning method must be specified."
         )
