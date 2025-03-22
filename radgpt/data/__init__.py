@@ -15,7 +15,9 @@ from .dataset import (
     convert_case_to_one_liner,
     hashme,
     read_synthetic_dataset,
+    read_synthetic_2025_02_28_dataset,
     read_mimic_iv_dataset,
+    read_mimic_iv_2025_02_28_dataset,
     read_jama_cc_dataset,
     read_medbullets_dataset,
     read_nejm_dataset
@@ -27,10 +29,12 @@ __all__ = [
     "convert_case_to_one_liner",
     "hashme",
     "read_mimic_iv_dataset",
+    "read_mimic_iv_2025_02_28_dataset",
     "read_nejm_dataset",
     "read_jama_cc_dataset",
     "read_medbullets_dataset",
     "read_synthetic_dataset",
+    "read_synthetic_2025_02_28_dataset",
     "load_case_labels",
     "utils"
 ]
@@ -50,16 +54,20 @@ def load_case_labels(
     if fn_or_url:
         return pd.read_csv(fn_or_url)
     data_files = {
-        "llama2-synthetic": "llama2-synthetic.jsonl",
+        "llama2_synthetic": "llama2-synthetic.jsonl",
         "synthetic": "synthetic.jsonl",
+        "synthetic_2025_02_28": "synthetic-2025-02-28.jsonl",
         "medbullets": "usmle.jsonl",
         "jama_cc": "jama.jsonl",
         "nejm": "nejm.jsonl",
-        "mimic_iv": "bidmc.jsonl"
+        "mimic_iv": "bidmc.jsonl",
+        "mimic_iv_2025_02_28": "bidmc-2025-02-28.jsonl",
     }
-    ds = load_dataset("michaelsyao/RadCases", data_files=data_files)
+    ds = load_dataset("michaelsyao/RadCases", data_files=data_files[
+        dataset.replace("-", "_")
+    ])
 
-    labels = ds[dataset].to_pandas()
+    labels = ds["train"].to_pandas()
     for c in labels.columns:
         if c == "case":
             continue

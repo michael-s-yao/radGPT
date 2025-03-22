@@ -45,7 +45,7 @@ class OpenAIRetriever(Retriever):
             return
         self.index = faiss.IndexFlatIP(self.hidden_size)
         for vec in [self.embed(doc.text) for doc in self.corpus]:
-            self.index.add(vec[np.newaxis])
+            self.index.add(vec[np.newaxis].astype(np.float32))
         faiss.write_index(self.index, self.index_fn)
 
     def retrieve(
@@ -60,7 +60,7 @@ class OpenAIRetriever(Retriever):
         Retrieve:
             The top k documents relevant to the query.
         """
-        embedding = self.embed(query)[np.newaxis]
+        embedding = self.embed(query)[np.newaxis].astype(np.float32)
         results = self.index.search(embedding, k=k)
         scores, idxs = self.index.search(embedding, k=k)
         results = [self.corpus[idx] for idx in idxs[0]]

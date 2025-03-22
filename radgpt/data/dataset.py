@@ -112,6 +112,20 @@ def read_synthetic_dataset(
     return pd.read_csv(dataset_url)["case_readable"].to_numpy()
 
 
+def read_synthetic_2025_02_28_dataset(
+    dataset_url: Optional[str] = None
+) -> np.ndarray:
+    """
+    Returns the synthetic LLM-generated dataset of patient one-liners, with
+    labels updated according to the ACR AC from 2025-02-28.
+    Input:
+        dataset_url: an optional URL or relative path to the dataset.
+    Returns:
+        An array of all the patient one-liners in the synthetic dataset.
+    """
+    return read_synthetic_dataset(dataset_url)
+
+
 def read_medbullets_dataset(
     github_branch_url: str = (
         "https://raw.githubusercontent.com/HanjieChen/ChallengeClinicalQA/"
@@ -192,7 +206,7 @@ def read_mimic_iv_dataset(
             note.
         seed: random seed. Default 42.
     Returns:
-        An array containing all the questions asked in the Medbullets dataset.
+        An array containing all the questions asked in the MIMIC-IV dataset.
     """
     patients = pd.read_csv(patients_fn)
     notes = pd.read_csv(notes_fn)
@@ -240,6 +254,19 @@ def read_mimic_iv_dataset(
 
         one_liners.append(txt)
     return np.array(one_liners)
+
+
+def read_mimic_iv_2025_02_28_dataset(**kwargs) -> np.ndarray:
+    """
+    Returns the MIMIC-IV clinical notes dataset with labels according to the
+    ACR AC from 2025-02-28.
+    Input:
+        Please see the docsstring for the `read_mimic_iv_dataset()` function
+        above for additional details.
+    Returns:
+        An array containing all the questions asked in the MIMIC-IV dataset.
+    """
+    return read_mimic_iv_dataset(**kwargs)
 
 
 def read_nejm_dataset(nejm_fn: Union[Path, str] = "nejm.jsonl") -> np.ndarray:

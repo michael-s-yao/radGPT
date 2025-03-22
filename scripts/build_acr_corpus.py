@@ -164,7 +164,9 @@ def pdf_to_chunks(
         )
 
         # Associate titles and headers with the next text item.
+        title = None
         for el_idx, el in titles:
+            title = el.text if title is None else title
             text_idx = el_idx + 1
             while text_idx < len(elements):
                 if text_idx in [idx for idx, _ in text]:
@@ -192,6 +194,7 @@ def pdf_to_chunks(
             text_match[-1].text = text_match[-1].text + " " + el.text
 
         content = [t[-1].text for t in text]
+        acrids = [int(fn.split("_")[-1].split(".")[0])] * len(content)
 
         is_ascii = np.where([c.isascii() for c in content])[0]
         is_text = np.where([len(c) > 3 for c in content])[0]

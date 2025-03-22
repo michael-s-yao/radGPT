@@ -24,10 +24,12 @@ import radgpt
 
 DATASETS_TO_PRETTY_NAMES: Dict[str, str] = {
     "synthetic": "Synthetic",
+    "synthetic_2025_02_28": "Synthetic (2025-02-28)",
     "medbullets": "Medbullets USMLE",
     "jama_cc": "JAMA Clinical Challenges",
     "nejm": "NEJM Case Records",
-    "mimic_iv": "BIDMC"
+    "mimic_iv": "BIDMC",
+    "mimic_iv_2025_02_28": "BIDMC (2025-02-28)",
 }
 
 
@@ -268,7 +270,11 @@ def main(
     )
     logger = logging.getLogger(__name__)
 
-    ac = radgpt.AppropriatenessCriteria()
+    ac_kwargs = {}
+    if "2025_02_28" in dataset:
+        ac_kwargs["criteria_fn"] = "radgpt/ac-2025-02-28.json"
+        ac_kwargs["guidelines_fn"] = "radgpt/guidelines-2025-02-28.jsonl"
+    ac = radgpt.AppropriatenessCriteria(**ac_kwargs)
     savepath = None
     run_id = f"{dataset}_{llm}_{method}_{eval_method}_{seed}"
     if method.lower() == "rag":
@@ -318,7 +324,7 @@ def main(
         lambda case: use_full_dataset or (
             radgpt.data.hashme(case) in y_gt["case"].values.tolist()
         ),
-        getattr(radgpt.data, f"read_{dataset}_dataset")()
+        getattr(radgpt.data, f"read_{dataset.replace('-', '_')}_dataset")()
     )
     patient_cases = sorted(
         list(set(list(patient_cases))), key=radgpt.data.hashme

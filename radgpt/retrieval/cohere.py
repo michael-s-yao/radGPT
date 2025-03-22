@@ -59,7 +59,7 @@ class CohereRetriever(Retriever):
         self.index = faiss.IndexFlatIP(self.hidden_size)
         embeddings = self.embed([doc.text for doc in self.corpus])
         for vec in embeddings:
-            self.index.add(vec[np.newaxis])
+            self.index.add(vec[np.newaxis].astype(np.float32))
         faiss.write_index(self.index, self.index_fn)
 
     def retrieve(
@@ -74,7 +74,7 @@ class CohereRetriever(Retriever):
         Retrieve:
             The top k documents relevant to the query.
         """
-        embedding = self.embed(query)
+        embedding = self.embed(query).astype(np.float32)
         results = self.index.search(embedding, k=k)
         scores, idxs = self.index.search(embedding, k=k)
         results = [self.corpus[idx] for idx in idxs[0]]

@@ -10,6 +10,7 @@ Licensed under the MIT License. Copyright University of Pennsylvania 2024.
 """
 import click
 import jsonlines
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -34,9 +35,12 @@ def get_llm_imaging_recs(
         A list of the corresponding LLM's imaging predictions.
     """
     with open(topic_preds_fn, "r") as f:
-        topics = [
-            [t.strip() for t in x.strip().split(";")] for x in f.readlines()
-        ]
+        with jsonlines.Reader(f) as reader:
+            topics = [
+                x["answer"]
+                if isinstance(x["answer"], list) else [x["answer"]]
+                for x in list(reader)
+            ]
     studies = []
     for t in topics:
         ypreds = list(
@@ -62,7 +66,7 @@ def load_imaging_orders(
     """
     with open(orders_fn, "r") as f:
         with jsonlines.Reader(f) as reader:
-            return list(reader)
+            return [x["answer"] for x in list(reader)]
 
 
 def compute_accuracy_per_study_ordered(
@@ -225,7 +229,7 @@ def compute_mcnemar_test(
     "--results-dir",
     "-r",
     type=str,
-    default="retrospective",
+    default="docs/retrospective",
     show_default=True,
     help="Path to the directory of retrospective results."
 )
@@ -240,21 +244,20 @@ def compute_mcnemar_test(
 @click.option(
     "--savedir",
     type=str,
-    default="retrospective",
+    default=".",
     show_default=True,
     help="Optional path to the directory to save the plots to."
 )
 def main(
-    results_dir: Union[Path, str] = "retrospective",
+    results_dir: Union[Path, str] = "docs/retrospective",
     seed: Optional[int] = 0,
-    savedir: Union[Path, str] = "retrospective"
+    savedir: Union[Path, str] = "."
 ):
     """Analyzes the retrospective study experimental results."""
     ac = radgpt.AppropriatenessCriteria()
     gt = load_imaging_orders(
         os.path.join(results_dir, "ground_truth.jsonl")
     )
-
     doctor = load_imaging_orders(
         os.path.join(results_dir, "clinician.jsonl")
     )
@@ -277,10 +280,10 @@ def main(
     all_llama_doc_dscs = []
     for k in range(4):
         claude = get_llm_imaging_recs(
-            os.path.join(results_dir, f"ClaudeSonnet/{k + 1}.txt"), ac
+            os.path.join(results_dir, f"ClaudeSonnet/{k + 1}.jsonl"), ac
         )
         llama = get_llm_imaging_recs(
-            os.path.join(results_dir, f"Llama3Instruct/{k + 1}.txt"), ac
+            os.path.join(results_dir, f"Llama3Instruct/{k + 1}.jsonl"), ac
         )
 
         claude_scores, llama_scores = [], []
@@ -406,6 +409,246 @@ def main(
                 alternative="two-sided"
             )
         )
+
+        if k == 0:
+            doctor_acc = sum(sum(doctor_scores, [])) / len(
+                sum(doctor_scores, [])
+            )
+            mpl.rcParams["axes.linewidth"] = 1.5
+            mpl.rcParams["font.family"] = "Arial"
+            mpl.rcParams["font.size"] = 12
+            fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(12, 8))
+            ax = ax.flatten()
+            ax[0].text(
+                -0.1,
+                1.1,
+                "(A)",
+                transform=ax[0].transAxes,
+                size=14,
+                weight="bold"
+            )
+            ax[0].bar(
+                ["Llama 3", "Claude Sonnet-3.5", "Physician"],
+                100.0 * np.array([llama_accs[0], claude_accs[0], doctor_acc]),
+                color=[
+                    llama_color + "aa",
+                    claude_color + "aa",
+                    doctor_color + "aa"
+                ],
+                hatch=["/", "\\", ""],
+                edgecolor="k",
+                linewidth=2
+            )
+            ax[0].set_xticklabels(
+                ["Llama 3", "Claude\nSonnet-3.5", "Physician"], rotation=30
+            )
+            ax[0].xaxis.set_tick_params(width=1.5)
+            ax[0].yaxis.set_tick_params(width=1.5)
+            ax[0].set_ylabel("Accuracy", fontweight="bold")
+            ax[0].spines[["right", "top"]].set_visible(False)
+
+            doctor_fpr = sum(doctor_fps) / float(len(doctor_fps))
+            ax[1].text(
+                -0.1,
+                1.1,
+                "(B)",
+                transform=ax[1].transAxes,
+                size=14,
+                weight="bold"
+            )
+            ax[1].bar(
+                ["Llama 3", "Claude Sonnet-3.5", "Physician"],
+                100.0 * np.array([
+                    llama_fps[0], claude_fps[0], doctor_fpr
+                ]),
+                color=[
+                    llama_color + "aa",
+                    claude_color + "aa",
+                    doctor_color + "aa"
+                ],
+                hatch=["/", "\\", ""],
+                edgecolor="k",
+                linewidth=2
+            )
+            ax[1].set_xticklabels(
+                ["Llama 3", "Claude\nSonnet-3.5", "Physician"], rotation=30
+            )
+            ax[1].xaxis.set_tick_params(width=1.5)
+            ax[1].yaxis.set_tick_params(width=1.5)
+            ax[1].set_ylabel("False Positive Rate", fontweight="bold")
+            ax[1].spines[["right", "top"]].set_visible(False)
+
+            doctor_fnr = sum(doctor_fns) / float(len(doctor_fns))
+            ax[2].text(
+                -0.1,
+                1.1,
+                "(C)",
+                transform=ax[2].transAxes,
+                size=14,
+                weight="bold"
+            )
+            ax[2].bar(
+                ["Llama 3", "Claude Sonnet-3.5", "Physician"],
+                100.0 * np.array([llama_fns[0], claude_fns[0], doctor_fnr]),
+                color=[
+                    llama_color + "aa",
+                    claude_color + "aa",
+                    doctor_color + "aa"
+                ],
+                hatch=["/", "\\", ""],
+                edgecolor="k",
+                linewidth=2
+            )
+            ax[2].set_xticklabels(
+                ["Llama 3", "Claude\nSonnet-3.5", "Physician"], rotation=30
+            )
+            ax[2].xaxis.set_tick_params(width=1.5)
+            ax[2].yaxis.set_tick_params(width=1.5)
+            ax[2].set_ylabel("False Negative Rate", fontweight="bold")
+            ax[2].spines[["right", "top"]].set_visible(False)
+
+            doctor_f1 = compute_f1(doctor, gt, ac)
+            ax[3].text(
+                -0.1,
+                1.1,
+                "(D)",
+                transform=ax[3].transAxes,
+                size=14,
+                weight="bold"
+            )
+            ax[3].bar(
+                ["Llama 3", "Claude Sonnet-3.5", "Physician"],
+                100.0 * np.array([llama_f1s[0], claude_f1s[0], doctor_f1]),
+                color=[
+                    llama_color + "aa",
+                    claude_color + "aa",
+                    doctor_color + "aa"
+                ],
+                hatch=["/", "\\", ""],
+                edgecolor="k",
+                linewidth=2
+            )
+            ax[3].set_xticklabels(
+                ["Llama 3", "Claude\nSonnet-3.5", "Physician"], rotation=30
+            )
+            ax[3].xaxis.set_tick_params(width=1.5)
+            ax[3].yaxis.set_tick_params(width=1.5)
+            ax[3].set_ylabel(r"$\mathregular{F_1}$ Score", fontweight="bold")
+            ax[3].spines[["right", "top"]].set_visible(False)
+
+            doctor_mu, ll, ul = mean_confidence_interval([
+                len(doc) for doc in doctor
+            ])
+            ax[4].text(
+                -0.1, 1.1,
+                "(E)",
+                transform=ax[4].transAxes,
+                size=14,
+                weight="bold"
+            )
+            ax[4].bar(
+                ["Llama 3", "Claude Sonnet-3.5", "Physician"],
+                np.array([llama_mu[0], claude_mu[0], doctor_mu]),
+                color=[
+                    llama_color + "aa",
+                    claude_color + "aa",
+                    doctor_color + "aa"
+                ],
+                hatch=["/", "\\", ""],
+                edgecolor="k",
+                linewidth=2
+            )
+            ax[4].errorbar(
+                ["Llama 3", "Claude Sonnet-3.5", "Physician"],
+                np.array([llama_mu[0], claude_mu[0], doctor_mu]),
+                yerr=[
+                    llama_mu[0] - llama_ll[0],
+                    claude_mu[0] - claude_ll[0],
+                    doctor_mu - ll
+                ],
+                color="k",
+                elinewidth=1.5,
+                linewidth=0,
+                capsize=2,
+                capthick=1.5
+            )
+            ax[4].set_xticklabels(
+                ["Llama 3", "Claude\nSonnet-3.5", "Physician"], rotation=30
+            )
+            ax[4].xaxis.set_tick_params(width=1.5)
+            ax[4].yaxis.set_tick_params(width=1.5)
+            ax[4].set_ylabel(
+                "Number of Imaging\nStudies Recommended", fontweight="bold"
+            )
+            ax[4].spines[["right", "top"]].set_visible(False)
+
+            _llama_mu, _llama_ll, _ = mean_confidence_interval(
+                all_llama_doc_dscs[0]
+            )
+            _claude_mu, _claude_ll, _ = mean_confidence_interval(
+                all_claude_doc_dscs[0]
+            )
+            _llm_mu, _llm_ll, _ = mean_confidence_interval(
+                all_claude_llama_dscs[0]
+            )
+            ax[5].text(
+                -0.1,
+                1.1,
+                "(F)",
+                transform=ax[5].transAxes,
+                size=14,
+                weight="bold"
+            )
+            ax[5].bar(
+                [
+                    "Llama 3 and Physician Agreement",
+                    "Claude Sonnet-3.5 and Physician Agreement",
+                    "Llama 3 and Claude Sonnet-3.5 Agreement"
+                ],
+                100.0 * np.array([_llama_mu, _claude_mu, _llm_mu]),
+                color=["#2C6677" + "aa", "#AA5621" + "aa", "#703171" + "aa"],
+                hatch=["/", "\\", ""],
+                edgecolor="k",
+                linewidth=2
+            )
+            ax[5].errorbar(
+                [
+                    "Llama 3 and Physician Agreement",
+                    "Claude Sonnet-3.5 and Physician Agreement",
+                    "Llama 3 and Claude Sonnet-3.5 Agreement"
+                ],
+                100.0 * np.array([_llama_mu, _claude_mu, _llm_mu]),
+                yerr=100.0 * np.array([
+                    _llama_mu - _llama_ll,
+                    _claude_mu - _claude_ll,
+                    _llm_mu - _llm_ll
+                ]),
+                color="k",
+                elinewidth=1.5,
+                linewidth=0,
+                capsize=2,
+                capthick=1.5
+            )
+            ax[5].set_xticklabels(
+                [
+                    "Llama 3 and\nPhysician Agreement",
+                    "Claude Sonnet-3.5 and\nPhysician Agreement",
+                    "Llama 3 and Claude\nSonnet-3.5 Agreement"
+                ],
+                rotation=30,
+            )
+            ax[5].xaxis.set_tick_params(width=1.5)
+            ax[5].yaxis.set_tick_params(width=1.5)
+            ax[5].set_ylabel("Dice-Sørensen Coefficient", fontweight="bold")
+            ax[5].spines[["right", "top"]].set_visible(False)
+
+            fig.tight_layout()
+            plt.savefig(
+                os.path.join(savedir, "main.svg"),
+                transparent=True,
+                bbox_inches="tight",
+                dpi=600
+            )
 
     plt.figure(figsize=(5, 3))
 
