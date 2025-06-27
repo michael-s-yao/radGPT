@@ -195,9 +195,9 @@ def main(
         llm.max_new_tokens = 512
     else:
         ex_answer = "Thoracic" if eval_method == "panel" else (
-            "Lung Cancer Screening"
+            "Chronic Cough"
             if eval_method == "topic"
-            else "CT chest without IV contrast screening"
+            else "Radiography chest"
         )
         system_prompt = system_prompt.format(categories, ex_answer)
     llm.set_system_prompt(system_prompt)

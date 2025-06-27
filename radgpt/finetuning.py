@@ -34,7 +34,7 @@ def get_finetuning_partition_options() -> Sequence[str]:
     Returns:
         The RadCases dataset partitions implemented for finetuning.
     """
-    return ["synthetic", "mixed"]
+    return ["synthetic", "llama2-synthetic", "mixed"]
 
 
 def build_finetuning_dataset(
@@ -64,6 +64,13 @@ def build_finetuning_dataset(
     if partition.lower() == "synthetic":
         y_gt = load_case_labels(dataset="synthetic")
         opts = [read_synthetic_dataset()]
+    elif partition.lower() == "llama2-synthetic":
+        y_gt = load_case_labels(dataset="llama2-synthetic")
+        opts = [
+            read_synthetic_dataset(
+                generating_model="meta-llama/Llama-2-7b-chat-hf"
+            )
+        ]
     else:
         y_gt = pd.concat([
             load_case_labels(dataset=ds).sample(
@@ -95,9 +102,9 @@ def build_finetuning_dataset(
         else (ac.topics if eval_method == "topic" else ac.studies)
     )
     ex_answer = "Thoracic" if eval_method == "panel" else (
-        "Lung Cancer Screening"
+        "Chronic Cough"
         if eval_method == "topic"
-        else "CT chest without IV contrast screening"
+        else "Radiography chest"
     )
     system = get_system_prompt("prompting").format(categories, ex_answer)
     systems = [system] * len(users)
