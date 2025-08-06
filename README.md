@@ -39,8 +39,17 @@ Questions and comments are welcome. Suggestions can be submitted through Github 
 
 ## Citation
 
-When available, relevant citation information will be added in a future commit.
-
+    @article{yao2025eval,
+      title={Evaluating acute image ordering for real-world patient cases via language model alignment with radiological guidelines},
+      author={Yao, Michael S and Chae, Allison and Saraiya, Piya and Kahn Jr., Charles E and Witschey, Walter R and Gee, James C and Sagreiya, Hersh and Bastani, Osbert},
+      journal={Nat Commun Med},
+      year={2025},
+      volume={5},
+      articleno={332},
+      url={https://www.nature.com/articles/s43856-025-01061-9},
+      doi={10.1038/s43856-025-01061-9}
+    }
+    
 ## License
 
 This repository is MIT licensed (see [LICENSE](LICENSE)).
